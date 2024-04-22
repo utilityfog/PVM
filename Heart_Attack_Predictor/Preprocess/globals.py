@@ -1,3 +1,4 @@
 # Excluding 'plan' from our list of categorical variables because there is linearity in its categories (1-99)
 RANDHIE_CATEGORICAL_VARIABLES = ['site', 'black', 'female', 'mhi', 'child', 'fchild', 'hlthg', 'hlthf', 'hlthp']
-RANDHIE_NUMERIC_VARIABLES = ['zper', 'plan', 'coins', 'tookphys', 'year', 'income', 'xage', 'educdec', 'time','outpdol','drugdol','suppdol','mentdol','inpdol','meddol','totadm','inpmis','mentvis','mdvis','notmdvis','num','disea','physlm','ghindx','mdeoff','pioff','lfam','lpi','idp','logc','fmde','xghindx','linc','lnum','lnmeddol','binexp']
+# Excluding 'plan' from list of numeric variables as well because it should not be standardized; it is a linear categorical variable
+RANDHIE_NUMERIC_VARIABLES = ['zper', 'coins', 'tookphys', 'year', 'income', 'xage', 'educdec', 'time', 'outpdol', 'drugdol', 'suppdol', 'mentdol', 'inpdol', 'meddol', 'totadm', 'inpmis', 'mentvis', 'mdvis', 'notmdvis', 'num', 'disea', 'physlm', 'ghindx', 'mdeoff', 'pioff', 'lfam', 'lpi', 'idp', 'logc', 'fmde', 'xghindx', 'linc', 'lnum', 'lnmeddol', 'binexp']

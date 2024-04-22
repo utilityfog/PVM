@@ -160,7 +160,7 @@ class RANDHIE:
         print(f"DataFrame after removing NaN and inf values: {df_cleaned.head()}")
         
         # Average the numeric column values at the patient (zper) level since we are not interested in time and the RANDHIE experiment has 5 individual year observations for each patient
-        collapsed_df = self.average_by_unique_patient(df_cleaned, "zper")
+        collapsed_df = self.average_by_unique_patient(df_cleaned, "zper") # Only average numeric columns when collapsing!!
         print(f"AVERAGED: {collapsed_df.head()}")
         
         # Re-Constructing Variables for the Four Equations from the Paper (must be done before standardization as it is affected by sign): ""
@@ -178,6 +178,10 @@ class RANDHIE:
         new_categorical_columns = RANDHIE_CATEGORICAL_VARIABLES + paper_variables_categorical
         standardized_df = standardize_dataframe(collapsed_df, new_numeric_columns, new_categorical_columns)
         print(f"STANDARDIZED - NEW: {standardized_df.head()}")
+        # Add plan without standardization
+        standardized_df['plan'] = collapsed_df['plan']
+        
+        # Combine standardized_df's child and fchild into one categorical column as they are redundant
         
         # One Hot Encoding categorical variables
         encoded_df = encode_categorical(standardized_df, new_categorical_columns)
@@ -187,12 +191,15 @@ class RANDHIE:
         processed_df = replace_encoded_categorical(standardized_df, encoded_df, new_categorical_columns)
         print(f"PROCESSED: {processed_df.head()}")
 
-        # Define independent variables based on the paper's model and available data
-        X_vars = ['xage', 'linc', 'coins', 'black', 'female', 'educdec']
-        X = processed_df[X_vars]
+        # Define independent variables based on the paper's model and available data: 
+            # Excluding variables that are known to be endogenous (e.g. if someone makes a lot of hospital visits, obviously it will have a positive causal relationship with their quantity demanded for medical care even if there are confounding variables that may affect the number of times they visit the hospital)
+            # Excluding variables that are a deterministic function of another to prevent perfect multicolinearity; no inclusion of both linc and income
+            # preprocess child into one categorical variable column
+        X_list = ['plan', 'tookphys', 'xage', 'educdec', 'time', 'disea', 'physlm', 'mdeoff', 'lfam', 'lpi', 'logc', 'xghindx', 'linc', 'lnum', 'site', 'black', 'female', 'mhi', 'hlthg', 'hlthf', 'hlthp']
+        X = processed_df[X_list]
         X = sm.add_constant(X)  # Adds an intercept term
         
-        # According to Paper
+        # Four equation model according to paper
 
         # Equation 1: Probit model for zero versus positive medical expenses
         model_1 = Probit(processed_df['is_positive_med_exp'], X).fit()
