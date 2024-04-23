@@ -10,7 +10,13 @@ import statsmodels.api as sm
 from sklearn.preprocessing import StandardScaler, OneHotEncoder
 from sklearn.compose import ColumnTransformer
 
-from .globals import RANDHIE_CATEGORICAL_VARIABLES, RANDHIE_NUMERIC_VARIABLES
+from .globals import RANDHIE_CATEGORICAL_VARIABLES, RANDHIE_NUMERIC_VARIABLES, HEART_CATEGORICAL_VARIABLES, HEART_NUMERIC_VARIABLES
+
+FINAL_RANDHIE_REGRESSORS = []
+FINAL_RANDHIE_Y = []
+
+FINAL_HEART_REGRESSORS = []
+FINAL_HEART_Y = []
 
 def standardize_dataframe(df, numerical_columns, exclude_columns):
     """
@@ -214,7 +220,7 @@ class RANDHIE:
         paper_variables_numeric = ['log_med_exp', 'log_inpatient_exp']
         print(f"processed_df's generated columns: {collapsed_df[paper_variables_numeric + paper_variables_categorical].head()}")
         # Test 2
-        # save_dataframe(collapsed_df, os.getcwd()+"/Heart_Attack_Predictor/Datasets", "randhie_preprocessed2.csv")
+        save_dataframe(collapsed_df, os.getcwd()+"/Heart_Attack_Predictor/Datasets", "randhie_preprocessed2.csv")
         
         # Standardize Numeric Columns: standardized_df = standardize_df(avg_df)
         new_numeric_columns = RANDHIE_NUMERIC_VARIABLES + paper_variables_numeric
@@ -259,19 +265,24 @@ class RANDHIE:
         # Define independent variables based on the paper's model and available data: 
             # Excluding variables that are known to be endogenous (e.g. if someone makes a lot of hospital visits, obviously it will have a positive causal relationship with their quantity demanded for medical care even if there are confounding variables that may affect the number of times they visit the hospital)
             # Excluding variables that are a deterministic function of another to prevent perfect multicolinearity; no inclusion of both linc and income
-        # black	mhi	coins	tookphys	year	income	xage	educdec	time	outpdol	drugdol	suppdol	mentdol	inpdol	meddol	totadm	inpmis	mentvis	mdvis	notmdvis	num	disea	physlm	ghindx	mdeoff	pioff	lfam	lpi	idp	logc	fmde	xghindx	linc	lnum	lnmeddol	binexp	log_med_exp	log_inpatient_exp	zper	plan
-        X_list = ['person_type_adult', 'person_type_fchild', 'person_type_mchild', 'hlthg_0', 'hlthg_1', 'hlthf_0',	'hlthf_1', 'hlthp_0', 'hlthp_1', 'female_0', 'female_1', 'site_2', 'site_3', 'site_4', 'site_5', 'site_6', 'plan', 'tookphys', 'xage', 'educdec', 'time', 'disea', 'physlm', 'mdeoff', 'lfam', 'lpi', 'logc', 'xghindx', 'linc', 'lnum', 'black', 'mhi']
+            # We use one hot encoding instead of dummy encoding because vectorization is affected by that choice. We want to capture maximum information for each vectorized row
+        X_list = ['person_type_adult', 'person_type_fchild', 'person_type_mchild', 'hlthg_0', 'hlthg_1', 'hlthf_0',	'hlthf_1', 'hlthp_0', 'hlthp_1', 'female_0', 'female_1', 'site_2', 'site_3', 'site_4', 'site_5', 'site_6', 'tookphys_0', 'tookphys_1', 'plan', 'xage', 'educdec', 'time', 'disea', 'physlm', 'mdeoff', 'lfam', 'lpi', 'logc', 'xghindx', 'linc', 'lnum', 'black', 'mhi']
         X = processed_df[X_list]
+        # print(f"randhie final X: {X}") # The ordering of the columns specified in X_list must be preserved!!
         X = sm.add_constant(X)  # Adds an intercept term
         
-        # Four equation model according to paper
+        # Store both final X_list (order preserved) and final y variables in global lists
+        FINAL_RANDHIE_REGRESSORS = X_list
+        FINAL_RANDHIE_Y = ['is_positive_med_exp_1', 'is_positive_inpatient_exp_1', 'log_med_exp', 'log_inpatient_exp']
+        
+        # FOUR EQUATION MODEL ACCORDING TO PAPER: Health Insurance and the Demand for Medical Care
 
         # Equation 1: Probit model for zero versus positive medical expenses
-        model_1 = Probit(processed_df['is_positive_med_exp_1'], X).fit()
+        model_1 = Probit(processed_df['is_positive_med_exp_1'], X).fit() # LASSO
 
         # Equation 2: Probit model for having zero versus positive inpatient expense, given positive use of medical services
         df_pos_med_exp = processed_df[processed_df['is_positive_med_exp_1'] == 1]  # Filter for positive medical use
-        model_2 = Probit(df_pos_med_exp['is_positive_inpatient_exp_1'], X.loc[df_pos_med_exp.index]).fit()
+        model_2 = Probit(df_pos_med_exp['is_positive_inpatient_exp_1'], X.loc[df_pos_med_exp.index]).fit() # LASSO
 
         # Equation 3: OLS regression for log of positive medical expenses if only outpatient services are used
         df_only_outpatient_exp = processed_df[processed_df['is_only_outpatient_exp_1'] == 1]
@@ -332,6 +343,49 @@ class RANDHIE:
         return result
     
 class HEART:
-    def preprocess(self):
-        df = None
-        return df
+    def preprocess(self, df_path):
+        """
+        Method that pre-processes the heart_attack_prediction.csv dataset
+        
+        Returns: pd.DataFrame
+        """
+        # Read
+        df = pd.read_csv(df_path)
+        print(f"Raw DataFrame: {df.head()}")
+        df.drop(['rownames'], axis=1, inplace=True)
+        
+        # Remove rows with NaN or inf values
+        df_cleaned = remove_nan_or_inf(df)
+        print(f"DataFrame after removing NaN and inf values: {df_cleaned.head()}")
+        # Test 0 
+        save_dataframe(df_cleaned, os.getcwd()+"/Heart_Attack_Predictor/Datasets", "heart_preprocessed0.csv")
+        
+        # Standardize Numeric Columns: standardized_df = standardize_df(avg_df)
+        numeric_columns = HEART_NUMERIC_VARIABLES
+        categorical_columns = HEART_CATEGORICAL_VARIABLES
+        standardized_df = standardize_dataframe(df_cleaned, numeric_columns, categorical_columns)
+        print(f"STANDARDIZED - NEW: {standardized_df.head()}")
+        # Test 1
+        save_dataframe(standardized_df, os.getcwd()+"/Heart_Attack_Predictor/Datasets", "heart_preprocessed1.csv")
+        
+        # One Hot Encoding categorical variables
+        encoded_df = encode_categorical(standardized_df, categorical_columns)
+        print(f"ONE HOT ENCODED (CATEGORICAL VARS): {encoded_df.head()}")
+        
+        # Replacing the heart df's categorical variables with one hot encoded variables
+        processed_df = replace_encoded_categorical(standardized_df, encoded_df, categorical_columns)
+        print(f"PROCESSED: {processed_df.head()}")
+        
+        # Check if final preprocessing has been done correctly
+        save_dataframe(processed_df, os.getcwd()+"/Heart_Attack_Predictor/Datasets", "heart_preprocessed_final.csv")
+
+        # Define independent variables 
+        X_list = ['filler']
+        X = processed_df[X_list]
+        X = sm.add_constant(X)  # Adds an intercept term
+        
+        # Store both final X_list (order preserved) and final y variables in global lists
+        FINAL_HEART_REGRESSORS = X_list
+        FINAL_HEART_Y = ['filler']
+        
+        return processed_df
