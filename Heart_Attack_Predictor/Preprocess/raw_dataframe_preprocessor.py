@@ -1,3 +1,5 @@
+import os
+from typing import List
 import pandas as pd
 import numpy as np
 
@@ -53,11 +55,17 @@ def encode_categorical(df, categorical_vars):
     Returns:
         pandas DataFrame: A DataFrame with one-hot encoded categorical variables.
     """
+    print(f"encodable categorical vars: {categorical_vars}")
+    
+    # Convert numeric categorical variables to categorical type
+    for col in categorical_vars:
+        df[col] = df[col].astype('category')
+        
     # Extract categorical variables
     categorical_df = df[categorical_vars]
     
     # Perform one-hot encoding for categorical variables, drop first ensures there is no multicolinearity
-    result = pd.get_dummies(categorical_df, drop_first=True)
+    result = pd.get_dummies(categorical_df, dtype=float, drop_first=False)
     
     return result
 
@@ -97,6 +105,33 @@ def remove_nan_or_inf(df: pd.DataFrame):
     df_cleaned = df_cleaned[~(df_cleaned.isin([np.inf, -np.inf]).any(axis=1))]
 
     return df_cleaned
+
+def save_dataframe(df, directory, filename):
+    """
+    Save a DataFrame to a specified directory as a CSV file.
+
+    Parameters:
+        df (pd.DataFrame): The DataFrame to save.
+        directory (str): The directory where the CSV file will be saved.
+        filename (str): The filename to use for the saved CSV file.
+
+    Returns:
+        None
+    """
+    # Check if the directory exists, if not, create it
+    if not os.path.exists(directory):
+        os.makedirs(directory)
+
+    # Ensure the filename ends with '.csv'
+    if not filename.endswith('.csv'):
+        filename += '.csv'
+
+    # Define the full path where the file will be saved
+    file_path = os.path.join(directory, filename)
+
+    # Save the DataFrame as a CSV file
+    df.to_csv(file_path, index=False)
+    print(f"DataFrame saved successfully to {file_path}")
 
 class RANDHIE:
     def original_preprocess(self, df_path):
@@ -155,13 +190,19 @@ class RANDHIE:
         df = pd.read_csv(df_path)
         print(f"Raw DataFrame: {df.head()}")
         
+        df.drop(['rownames'], axis=1, inplace=True)
+        
         # Remove rows with NaN or inf values
         df_cleaned = remove_nan_or_inf(df)
         print(f"DataFrame after removing NaN and inf values: {df_cleaned.head()}")
+        # Test 0
+        save_dataframe(df_cleaned, os.getcwd()+"/Heart_Attack_Predictor/Datasets", "randhie_preprocessed0.csv")
         
         # Average the numeric column values at the patient (zper) level since we are not interested in time and the RANDHIE experiment has 5 individual year observations for each patient
-        collapsed_df = self.average_by_unique_patient(df_cleaned, "zper") # Only average numeric columns when collapsing!!
+        collapsed_df = self.average_by_unique_patient(df_cleaned, "zper", RANDHIE_CATEGORICAL_VARIABLES)
         print(f"AVERAGED: {collapsed_df.head()}")
+        # Test 1
+        save_dataframe(collapsed_df, os.getcwd()+"/Heart_Attack_Predictor/Datasets", "randhie_preprocessed1.csv")
         
         # Re-Constructing Variables for the Four Equations from the Paper (must be done before standardization as it is affected by sign): ""
         collapsed_df['is_positive_med_exp'] = (collapsed_df['meddol'] > 0).astype(int)  # 1 if positive medical expenses, else 0
@@ -172,6 +213,8 @@ class RANDHIE:
         paper_variables_categorical = ['is_positive_med_exp', 'is_positive_inpatient_exp', 'is_only_outpatient_exp']
         paper_variables_numeric = ['log_med_exp', 'log_inpatient_exp']
         print(f"processed_df's generated columns: {collapsed_df[paper_variables_numeric + paper_variables_categorical].head()}")
+        # Test 2
+        # save_dataframe(collapsed_df, os.getcwd()+"/Heart_Attack_Predictor/Datasets", "randhie_preprocessed2.csv")
         
         # Standardize Numeric Columns: standardized_df = standardize_df(avg_df)
         new_numeric_columns = RANDHIE_NUMERIC_VARIABLES + paper_variables_numeric
@@ -180,8 +223,27 @@ class RANDHIE:
         print(f"STANDARDIZED - NEW: {standardized_df.head()}")
         # Add plan without standardization
         standardized_df['plan'] = collapsed_df['plan']
+        # Test 3
+        save_dataframe(standardized_df, os.getcwd()+"/Heart_Attack_Predictor/Datasets", "randhie_preprocessed3.csv")
         
         # Combine standardized_df's child and fchild into one categorical column as they are redundant
+        # Create a new categorical column combining 'child' and 'fchild'
+        conditions = [
+            (standardized_df['child'] == 1) & (standardized_df['fchild'] == 0),
+            (standardized_df['child'] == 1) & (standardized_df['fchild'] == 1),
+            (standardized_df['child'] == 0)
+        ]
+        choices = ['mchild', 'fchild', 'adult']
+        standardized_df['person_type'] = np.select(conditions, choices, default='adult')
+        # Append newly constructed person_type
+        new_categorical_columns.append('person_type')
+        
+        # Drop the original 'child' and 'fchild' columns as no longer needed
+        standardized_df.drop(['child', 'fchild'], axis=1, inplace=True)
+        for item in ['child', 'fchild']:
+            new_categorical_columns.remove(item)
+        # Test 4
+        save_dataframe(standardized_df, os.getcwd()+"/Heart_Attack_Predictor/Datasets", "randhie_preprocessed4.csv")
         
         # One Hot Encoding categorical variables
         encoded_df = encode_categorical(standardized_df, new_categorical_columns)
@@ -190,30 +252,33 @@ class RANDHIE:
         # Replacing the randhie df's categorical variables with one hot encoded variables
         processed_df = replace_encoded_categorical(standardized_df, encoded_df, new_categorical_columns)
         print(f"PROCESSED: {processed_df.head()}")
+        
+        # Check if final preprocessing has been done correctly
+        save_dataframe(processed_df, os.getcwd()+"/Heart_Attack_Predictor/Datasets", "randhie_preprocessed_final.csv")
 
         # Define independent variables based on the paper's model and available data: 
             # Excluding variables that are known to be endogenous (e.g. if someone makes a lot of hospital visits, obviously it will have a positive causal relationship with their quantity demanded for medical care even if there are confounding variables that may affect the number of times they visit the hospital)
             # Excluding variables that are a deterministic function of another to prevent perfect multicolinearity; no inclusion of both linc and income
-            # preprocess child into one categorical variable column
-        X_list = ['plan', 'tookphys', 'xage', 'educdec', 'time', 'disea', 'physlm', 'mdeoff', 'lfam', 'lpi', 'logc', 'xghindx', 'linc', 'lnum', 'site', 'black', 'female', 'mhi', 'hlthg', 'hlthf', 'hlthp']
+        # black	mhi	coins	tookphys	year	income	xage	educdec	time	outpdol	drugdol	suppdol	mentdol	inpdol	meddol	totadm	inpmis	mentvis	mdvis	notmdvis	num	disea	physlm	ghindx	mdeoff	pioff	lfam	lpi	idp	logc	fmde	xghindx	linc	lnum	lnmeddol	binexp	log_med_exp	log_inpatient_exp	zper	plan
+        X_list = ['person_type_adult', 'person_type_fchild', 'person_type_mchild', 'hlthg_0', 'hlthg_1', 'hlthf_0',	'hlthf_1', 'hlthp_0', 'hlthp_1', 'female_0', 'female_1', 'site_2', 'site_3', 'site_4', 'site_5', 'site_6', 'plan', 'tookphys', 'xage', 'educdec', 'time', 'disea', 'physlm', 'mdeoff', 'lfam', 'lpi', 'logc', 'xghindx', 'linc', 'lnum', 'black', 'mhi']
         X = processed_df[X_list]
         X = sm.add_constant(X)  # Adds an intercept term
         
         # Four equation model according to paper
 
         # Equation 1: Probit model for zero versus positive medical expenses
-        model_1 = Probit(processed_df['is_positive_med_exp'], X).fit()
+        model_1 = Probit(processed_df['is_positive_med_exp_1'], X).fit()
 
         # Equation 2: Probit model for having zero versus positive inpatient expense, given positive use of medical services
-        df_pos_med_exp = processed_df[processed_df['is_positive_med_exp'] == 1]  # Filter for positive medical use
-        model_2 = Probit(df_pos_med_exp['is_positive_inpatient_exp'], X.loc[df_pos_med_exp.index]).fit()
+        df_pos_med_exp = processed_df[processed_df['is_positive_med_exp_1'] == 1]  # Filter for positive medical use
+        model_2 = Probit(df_pos_med_exp['is_positive_inpatient_exp_1'], X.loc[df_pos_med_exp.index]).fit()
 
         # Equation 3: OLS regression for log of positive medical expenses if only outpatient services are used
-        df_only_outpatient_exp = processed_df[processed_df['is_only_outpatient_exp'] == 1]
+        df_only_outpatient_exp = processed_df[processed_df['is_only_outpatient_exp_1'] == 1]
         model_3 = OLS(df_only_outpatient_exp['log_med_exp'], X.loc[df_only_outpatient_exp.index]).fit()
 
         # Equation 4: OLS regression for log of medical expenses for those with any inpatient expenses
-        df_pos_inpatient_exp = processed_df[processed_df['is_positive_inpatient_exp'] == 1]
+        df_pos_inpatient_exp = processed_df[processed_df['is_positive_inpatient_exp_1'] == 1]
         model_4 = OLS(df_pos_inpatient_exp['log_inpatient_exp'], X.loc[df_pos_inpatient_exp.index]).fit()
 
         # Print summaries of the models
@@ -227,21 +292,43 @@ class RANDHIE:
         print(model_4.summary())
         
         return processed_df
-        
-    def average_by_unique_patient(self, df, id_column):
+    
+    def average_by_unique_patient(self, df: pd.DataFrame, id_column: str, categorical_cols=[]):
         """
-        A function to average attributes of a time series dataset by a unique ID.
+        A function to average attributes of a time series dataset by a unique ID, 
+        averaging true numeric columns and randomly selecting values for categorical columns.
         
         Parameters:
             df (pandas DataFrame): The input dataset.
             id_column (str): The name of the column containing unique IDs.
-            attribute_columns (list): A list of column names containing attributes to be averaged.
+            categorical_cols (list): A list of column names that are categorical but represented numerically.
             
         Returns:
-            pandas DataFrame: A DataFrame with averaged rows, indexed by unique ID.
+            pandas DataFrame: A DataFrame with averaged numeric columns and randomly selected categorical columns, indexed by unique ID.
         """
-        attributes = df.columns.tolist()
-        result = df.groupby(id_column)[attributes].mean()
+        # Identify numeric columns (excluding categorical ones)
+        numeric_cols = df.select_dtypes(include=[np.number]).columns.tolist()
+        numeric_cols = [col for col in numeric_cols if col not in categorical_cols and col != id_column]
+        
+        # Non-numeric columns are either categorical or explicitly excluded from numeric
+        non_numeric_cols = df.select_dtypes(exclude=[np.number]).columns.tolist() + categorical_cols
+        non_numeric_cols = [col for col in non_numeric_cols if col != id_column]
+        
+        # Group by ID and compute the mean for numeric columns
+        if numeric_cols:
+            df_numeric_mean = df.groupby(id_column)[numeric_cols].mean()
+        else:
+            df_numeric_mean = pd.DataFrame(index=df[id_column].unique())
+
+        # Group by ID and randomly select a value for non-numeric columns
+        df_non_numeric_random = df.groupby(id_column)[non_numeric_cols].agg(lambda x: np.random.choice(x.dropna()))
+
+        # Combine the results
+        result = pd.concat([df_numeric_mean, df_non_numeric_random], axis=1)
+        
+        # Reset the index to make 'id_column' a regular column again
+        result.reset_index(inplace=True)
+        
         return result
     
 class HEART:
