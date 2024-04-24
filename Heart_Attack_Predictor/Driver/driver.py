@@ -18,7 +18,15 @@ def main():
     # Pre-processed randhie dataset
     randhie_preprocessed = randhie.improved_preprocess(randhie_path)
     
-    print(f"preprocessed rand hie dataset: {randhie_preprocessed.head()}")
+    # heart dataset path
+    heart_path = os.getcwd()+"/Heart_Attack_Predictor/Datasets/heart_attack_prediction_dataset.csv"
+    
+    # Initialize HEART class instance
+    heart = raw_dataframe_preprocessor.HEART()
+    
+    heart_preprocessed = heart.preprocess(heart_path)
+    
+    # print(f"preprocessed rand hie dataset: {randhie_preprocessed.head()}")
 
 if __name__ == "__main__":
     main()
