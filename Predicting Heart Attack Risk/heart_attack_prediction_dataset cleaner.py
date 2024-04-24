@@ -30,8 +30,8 @@ class heart_attack_prediction_dataset:
 
         ### One hot encode the categorical variables
         df = pd.get_dummies(df, columns=['Sex', 'Diet','Country'])
-        # Drop to prevent multicolinearity with binary variables
-        df = df.drop(['Sex_Male', 'Diet_Average', 'Country_Argentina'], axis=1)
+        # Drop to prevent multicolinearity with binary variables ??
+        # df = df.drop(['Sex_Male', 'Diet_Average', 'Country_Argentina'], axis=1)
 
         ### Seperate systolic and diastolic blood pressure into their own variables and create an interaction term.
         # Split the 'Blood Pressure' column into 'Systolic' and 'Diastolic'

@@ -352,13 +352,15 @@ class HEART:
         # Read
         df = pd.read_csv(df_path)
         print(f"Raw DataFrame: {df.head()}")
-        df.drop(['rownames'], axis=1, inplace=True)
         
         # Remove rows with NaN or inf values
         df_cleaned = remove_nan_or_inf(df)
         print(f"DataFrame after removing NaN and inf values: {df_cleaned.head()}")
         # Test 0 
         save_dataframe(df_cleaned, os.getcwd()+"/Heart_Attack_Predictor/Datasets", "heart_preprocessed0.csv")
+        
+        # Get Log Income
+        df_cleaned['Log_Income'] = np.log(df_cleaned['Income'])
         
         # Standardize Numeric Columns: standardized_df = standardize_df(avg_df)
         numeric_columns = HEART_NUMERIC_VARIABLES
@@ -376,16 +378,26 @@ class HEART:
         processed_df = replace_encoded_categorical(standardized_df, encoded_df, categorical_columns)
         print(f"PROCESSED: {processed_df.head()}")
         
-        # Check if final preprocessing has been done correctly
-        save_dataframe(processed_df, os.getcwd()+"/Heart_Attack_Predictor/Datasets", "heart_preprocessed_final.csv")
+        ### Seperate systolic and diastolic blood pressure into their own variables and create an interaction term.
+        # Split the 'Blood Pressure' column into 'Systolic' and 'Diastolic'
+        processed_df[['Systolic', 'Diastolic']] = processed_df['Blood Pressure'].str.split('/', expand=True).astype(int)
+        
+        # Create interaction term by multiplying Systolic and Diastolic pressures
+        processed_df['BP_Interaction'] = processed_df['Systolic'] * processed_df['Diastolic']
+        
+        # Drop unnecessary variables
+        processed_df = processed_df.drop(['Patient ID', 'Blood Pressure', 'Income', 'Continent', 'Hemisphere'], axis=1)
 
         # Define independent variables 
-        X_list = ['filler']
+        X_list = list(processed_df.columns)
         X = processed_df[X_list]
         X = sm.add_constant(X)  # Adds an intercept term
         
         # Store both final X_list (order preserved) and final y variables in global lists
         FINAL_HEART_REGRESSORS = X_list
-        FINAL_HEART_Y = ['filler']
+        FINAL_HEART_Y = ['Heart Attack Risk']
+        
+        # Check if final preprocessing has been done correctly
+        save_dataframe(processed_df, os.getcwd()+"/Heart_Attack_Predictor/Datasets", "heart_preprocessed_final.csv")
         
         return processed_df
