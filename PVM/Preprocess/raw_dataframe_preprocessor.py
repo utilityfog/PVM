@@ -4,6 +4,8 @@ import pandas as pd
 import numpy as np
 import torch
 import torch.nn as nn
+import seaborn as sns
+import matplotlib.pyplot as plt
 
 from statsmodels.discrete.discrete_model import Probit
 from statsmodels.api import OLS
@@ -24,8 +26,18 @@ FINAL_RANDHIE_Y = []
 FINAL_HEART_REGRESSORS = []
 FINAL_HEART_Y = []
 
+FINAL_RANDHIE_PREDICTOR_DATAFRAME = None
+FINAL_HEART_PREDICTOR_DATAFRAME = None
+
 def return_final_variables():
     return FINAL_RANDHIE_REGRESSORS, FINAL_HEART_REGRESSORS, FINAL_RANDHIE_Y, FINAL_HEART_Y
+
+def return_final_predictor_dataframes():
+    return FINAL_RANDHIE_PREDICTOR_DATAFRAME, FINAL_HEART_PREDICTOR_DATAFRAME
+
+def update_rearranged_final_predictor_dataframe(df):
+    global FINAL_HEART_PREDICTOR_DATAFRAME
+    FINAL_HEART_PREDICTOR_DATAFRAME = df
 
 def standardize_dataframe(df, numerical_columns, exclude_columns):
     """
@@ -147,6 +159,35 @@ def save_dataframe(df, directory, filename):
     # Save the DataFrame as a CSV file
     df.to_csv(file_path, index=False)
     print(f"DataFrame saved successfully to {file_path}")
+    
+def plot_and_save_covariance_matrix(df, filepath):
+    """
+    Computes the covariance matrix of the columns in the given DataFrame, plots a heatmap of it,
+    and saves the plot as an image file.
+
+    Parameters:
+    - df (pd.DataFrame): The input DataFrame containing numeric data.
+    - filename (str): The name of the file to save the image.
+
+    Returns:
+    - None: The function saves the heatmap image of the covariance matrix.
+    """
+    if df.empty:
+        raise ValueError("The DataFrame is empty. Please provide a DataFrame with data.")
+    
+    # Calculate the covariance matrix
+    covariance_matrix = df.cov()
+    
+    # Create a heatmap of the covariance matrix
+    plt.figure(figsize=(10, 8))
+    sns.heatmap(covariance_matrix, annot=True, fmt=".2f", cmap='coolwarm')
+    plt.title('Covariance Matrix Heatmap')
+    
+    # Save the plot to a file
+    plt.savefig(filepath)
+    plt.close()
+
+    print(f"Heatmap saved as {filepath}")
 
 class RANDHIE:
     def original_preprocess(self, df_path):
@@ -168,7 +209,7 @@ class RANDHIE:
         # Define independent variables based on the paper's model and available data
         X_vars = ['xage', 'linc', 'coins', 'black', 'female', 'educdec']
         X = df[X_vars]
-        X = sm.add_constant(X)  # Adds a constant term to the predictor
+        # X = sm.add_constant(X)  # Adds a constant term to the predictor
 
         # Equation 1: Probit model for zero versus positive medical expenses
         model_1 = Probit(df['positive_med_exp'], X).fit()
@@ -211,13 +252,13 @@ class RANDHIE:
         df_cleaned = remove_nan_or_inf(df)
         print(f"DataFrame after removing NaN and inf values: {df_cleaned.head()}")
         # Test 0
-        save_dataframe(df_cleaned, os.getcwd()+"/Heart_Attack_Predictor/Datasets", "randhie_preprocessed0.csv")
+        save_dataframe(df_cleaned, os.getcwd()+"/PVM/Datasets", "randhie_preprocessed0.csv")
         
         # Average the numeric column values at the patient (zper) level since we are not interested in time and the RANDHIE experiment has 5 individual year observations for each patient
         collapsed_df = self.average_by_unique_patient(df_cleaned, "zper", RANDHIE_CATEGORICAL_VARIABLES)
         print(f"AVERAGED: {collapsed_df.head()}")
         # Test 1
-        save_dataframe(collapsed_df, os.getcwd()+"/Heart_Attack_Predictor/Datasets", "randhie_preprocessed1.csv")
+        save_dataframe(collapsed_df, os.getcwd()+"/PVM/Datasets", "randhie_preprocessed1.csv")
         
         # Re-Constructing Variables for the Four Equations from the Paper (must be done before standardization as it is affected by sign): ""
         collapsed_df['is_positive_med_exp'] = (collapsed_df['meddol'] > 0).astype(int)  # 1 if positive medical expenses, else 0
@@ -229,17 +270,17 @@ class RANDHIE:
         paper_variables_numeric = ['log_med_exp', 'log_inpatient_exp']
         print(f"processed_df's generated columns: {collapsed_df[paper_variables_numeric + paper_variables_categorical].head()}")
         # Test 2
-        save_dataframe(collapsed_df, os.getcwd()+"/Heart_Attack_Predictor/Datasets", "randhie_preprocessed2.csv")
+        save_dataframe(collapsed_df, os.getcwd()+"/PVM/Datasets", "randhie_preprocessed2.csv")
         
         # Standardize Numeric Columns: standardized_df = standardize_df(avg_df)
         new_numeric_columns = RANDHIE_NUMERIC_VARIABLES + paper_variables_numeric
-        new_categorical_columns = RANDHIE_CATEGORICAL_VARIABLES + paper_variables_categorical
+        new_categorical_columns = RANDHIE_CATEGORICAL_VARIABLES
         standardized_df = standardize_dataframe(collapsed_df, new_numeric_columns, new_categorical_columns)
         print(f"STANDARDIZED - NEW: {standardized_df.head()}")
         # Add plan without standardization
         standardized_df['plan'] = collapsed_df['plan']
         # Test 3
-        save_dataframe(standardized_df, os.getcwd()+"/Heart_Attack_Predictor/Datasets", "randhie_preprocessed3.csv")
+        save_dataframe(standardized_df, os.getcwd()+"/PVM/Datasets", "randhie_preprocessed3.csv")
         
         # Combine standardized_df's child and fchild into one categorical column as they are redundant
         # Create a new categorical column combining 'child' and 'fchild'
@@ -253,12 +294,12 @@ class RANDHIE:
         # Append newly constructed person_type
         new_categorical_columns.append('person_type')
         
-        # Drop the original 'child' and 'fchild' columns as no longer needed
-        standardized_df.drop(['child', 'fchild'], axis=1, inplace=True)
-        for item in ['child', 'fchild']:
+        # Drop unnecessary columns
+        standardized_df.drop(['child', 'fchild', 'coins'], axis=1, inplace=True)
+        for item in ['child', 'fchild', 'coins']:
             new_categorical_columns.remove(item)
         # Test 4
-        save_dataframe(standardized_df, os.getcwd()+"/Heart_Attack_Predictor/Datasets", "randhie_preprocessed4.csv")
+        save_dataframe(standardized_df, os.getcwd()+"/PVM/Datasets", "randhie_preprocessed4.csv")
         
         # One Hot Encoding categorical variables
         encoded_df = encode_categorical(standardized_df, new_categorical_columns)
@@ -267,51 +308,73 @@ class RANDHIE:
         # Replacing the randhie df's categorical variables with one hot encoded variables
         processed_df = replace_encoded_categorical(standardized_df, encoded_df, new_categorical_columns)
         print(f"PROCESSED: {processed_df.head()}")
-        
-        # Check if final preprocessing has been done correctly
-        save_dataframe(processed_df, os.getcwd()+"/Heart_Attack_Predictor/Datasets", "randhie_preprocessed_final.csv")
 
         # Define independent variables based on the paper's model and available data: 
             # Excluding variables that are known to be endogenous (e.g. if someone makes a lot of hospital visits, obviously it will have a positive causal relationship with their quantity demanded for medical care even if there are confounding variables that may affect the number of times they visit the hospital)
             # Excluding variables that are a deterministic function of another to prevent perfect multicolinearity; no inclusion of both linc and income
             # We use one hot encoding instead of dummy encoding because vectorization is affected by that choice. We want to capture maximum information for each vectorized row
-        X_list = ['person_type_adult', 'person_type_fchild', 'person_type_mchild', 'hlthg_0', 'hlthg_1', 'hlthf_0',	'hlthf_1', 'hlthp_0', 'hlthp_1', 'female_0', 'female_1', 'site_2', 'site_3', 'site_4', 'site_5', 'site_6', 'tookphys_0', 'tookphys_1', 'plan', 'xage', 'educdec', 'time', 'disea', 'physlm', 'mdeoff', 'lfam', 'lpi', 'logc', 'xghindx', 'linc', 'lnum', 'black', 'mhi']
-        X = processed_df[X_list]
-        # print(f"randhie final X: {X}") # The ordering of the columns specified in X_list must be preserved!!
-        X = sm.add_constant(X)  # Adds an intercept term
+        processed_df.drop(['income', 'year', 'outpdol', 'drugdol', 'suppdol', 'mentdol', 'inpdol', 'meddol', 'totadm', 'num', 'ghindx', 'logc', 'fmde', 'lnmeddol', 'binexp', 'zper'], axis=1, inplace=True)
+        print(f"processed_df columns: {list(processed_df.columns)}")
+        y_list = ['log_med_exp', 'log_inpatient_exp', 'is_positive_med_exp', 'is_positive_inpatient_exp', 'is_only_outpatient_exp']
+        X = processed_df.drop(y_list, axis=1)
+        print(f"final randhie X: {X.head()}")
+        
+        # Final RANDHIE predictors
+        X_list = list(X.columns)
+        print(f"length of final randhie X: {len(X_list)}")
+        # ['coins', 'person_type_adult', 'person_type_fchild', 'person_type_mchild', 'hlthg_0', 'hlthg_1', 'hlthf_0', 'hlthf_1', 'hlthp_0', 'hlthp_1', 'female_0', 'female_1', 'site_2', 'site_3', 'site_4', 'site_5', 'site_6', 'tookphys_0', 'tookphys_1', 'plan', 'xage', 'educdec', 'time', 'disea', 'physlm', 'mdeoff', 'lfam', 'lpi', 'logc', 'xghindx', 'linc', 'lnum', 'black', 'mhi']
+        # X = sm.add_constant(X)  # Adds an intercept term
+        
+        # DataFrame for final predictors of randhie dataset
+        save_dataframe(X, os.getcwd()+"/PVM/Datasets", "randhie_preprocessed_X.csv")
+        plot_and_save_covariance_matrix(X, filepath='./PVM/Plots/randhie_covariance_matrix.png')
         
         # Store both final X_list (order preserved) and final y variables in global lists
+        global FINAL_RANDHIE_REGRESSORS 
         FINAL_RANDHIE_REGRESSORS = X_list
-        FINAL_RANDHIE_Y = ['is_positive_med_exp_1', 'is_positive_inpatient_exp_1', 'log_med_exp', 'log_inpatient_exp']
+        global FINAL_RANDHIE_Y
+        FINAL_RANDHIE_Y = y_list
         
-        # FOUR EQUATION MODEL ACCORDING TO PAPER: Health Insurance and the Demand for Medical Care
+        # Store to global df
+        global FINAL_RANDHIE_PREDICTOR_DATAFRAME
+        FINAL_RANDHIE_PREDICTOR_DATAFRAME = X
+        
+        # Check if final preprocessing has been done correctly; includes both X and y
+        save_dataframe(processed_df, os.getcwd()+"/PVM/Datasets", "randhie_preprocessed_final.csv")
+        
+        # THREE EQUATION MODEL ACCORDING TO PAPER: Health Insurance and the Demand for Medical Care
 
-        # Equation 1: Probit model for zero versus positive medical expenses
-        model_1 = Probit(processed_df['is_positive_med_exp_1'], X).fit() # LASSO
+        ### REMOVED due to all instances of is_positive_med_exp only being 1 after being preprocessed; this is anticipated as we are have summarized 5 years of data into 1
+        # # Equation 1: Lasso model for zero versus positive medical expenses
+        # # model_1 = Probit(processed_df['is_positive_med_exp_1'], X).fit() # LASSO
+        # lasso_log_model_1 = LogisticRegression(penalty='l1', solver='liblinear')
+        # lasso_log_model_1.fit(X, processed_df['is_positive_med_exp'])
 
-        # Equation 2: Probit model for having zero versus positive inpatient expense, given positive use of medical services
-        df_pos_med_exp = processed_df[processed_df['is_positive_med_exp_1'] == 1]  # Filter for positive medical use
-        model_2 = Probit(df_pos_med_exp['is_positive_inpatient_exp_1'], X.loc[df_pos_med_exp.index]).fit() # LASSO
+        # Equation 2: Lasso model for having zero versus positive inpatient expense, given positive use of medical services
+        df_pos_med_exp = processed_df[processed_df['is_positive_med_exp'] == 1]  # Filter for positive medical use
+        # model_2 = Probit(df_pos_med_exp['is_positive_inpatient_exp_1'], X.loc[df_pos_med_exp.index]).fit() # LASSO
+        lasso_log_model_2 = LogisticRegression(penalty='l1', solver='liblinear')
+        lasso_log_model_2.fit(X, df_pos_med_exp['is_positive_inpatient_exp'])
 
         # Equation 3: OLS regression for log of positive medical expenses if only outpatient services are used
-        df_only_outpatient_exp = processed_df[processed_df['is_only_outpatient_exp_1'] == 1]
+        df_only_outpatient_exp = processed_df[processed_df['is_only_outpatient_exp'] == 1]
         model_3 = OLS(df_only_outpatient_exp['log_med_exp'], X.loc[df_only_outpatient_exp.index]).fit()
 
         # Equation 4: OLS regression for log of medical expenses for those with any inpatient expenses
-        df_pos_inpatient_exp = processed_df[processed_df['is_positive_inpatient_exp_1'] == 1]
+        df_pos_inpatient_exp = processed_df[processed_df['is_positive_inpatient_exp'] == 1]
         model_4 = OLS(df_pos_inpatient_exp['log_inpatient_exp'], X.loc[df_pos_inpatient_exp.index]).fit()
 
         # Print summaries of the models
-        print("Model 1: Probit model for zero versus positive medical expenses")
-        print(model_1.summary())
+        # print("Model 1: Probit model for zero versus positive medical expenses")
+        # print(lasso_log_model_1.summary())
         print("\nModel 2: Probit model for having zero versus positive inpatient expense, given positive use of medical services")
-        print(model_2.summary())
+        # print(lasso_log_model_2.summary())
         print("\nModel 3: OLS regression for log of positive medical expenses if only outpatient services are used")
         print(model_3.summary())
         print("\nModel 4: OLS regression for log of medical expenses for those with any inpatient expenses")
         print(model_4.summary())
         
-        return processed_df
+        return processed_df, X
     
     def average_by_unique_patient(self, df: pd.DataFrame, id_column: str, categorical_cols=[]):
         """
@@ -354,7 +417,7 @@ class RANDHIE:
 class HEART:
     def preprocess(self, df_path):
         """
-        Method that pre-processes the heart_attack_prediction.csv dataset
+        Method that pre-processes the heart_attack_prediction_dataset.csv dataset
         
         CleaningDecisions:
         1. Seperate Systolic and Diastolic blood pressure into seperate columns 
@@ -372,7 +435,7 @@ class HEART:
         df_cleaned = remove_nan_or_inf(df)
         print(f"DataFrame after removing NaN and inf values: {df_cleaned.head()}")
         # Test 0 
-        save_dataframe(df_cleaned, os.getcwd()+"/Heart_Attack_Predictor/Datasets", "heart_preprocessed0.csv")
+        save_dataframe(df_cleaned, os.getcwd()+"/PVM/Datasets", "heart_preprocessed0.csv")
         
         # Get Log Income
         df_cleaned['Log_Income'] = np.log(df_cleaned['Income'])
@@ -383,7 +446,7 @@ class HEART:
         standardized_df = standardize_dataframe(df_cleaned, numeric_columns, categorical_columns)
         print(f"STANDARDIZED - NEW: {standardized_df.head()}")
         # Test 1
-        save_dataframe(standardized_df, os.getcwd()+"/Heart_Attack_Predictor/Datasets", "heart_preprocessed1.csv")
+        save_dataframe(standardized_df, os.getcwd()+"/PVM/Datasets", "heart_preprocessed1.csv")
         
         # One Hot Encoding categorical variables
         encoded_df = encode_categorical(standardized_df, categorical_columns)
@@ -403,10 +466,14 @@ class HEART:
         # Drop unnecessary variables
         processed_df = processed_df.drop(['Patient ID', 'Blood Pressure', 'Income', 'Continent', 'Hemisphere'], axis=1)
 
-        # Define independent variables 
+        # Define independent variables
         X_list = list(processed_df.columns)
         X = processed_df[X_list]
-        X = sm.add_constant(X)  # Adds an intercept term
+        print(f"final heart X: {X.head()}")
+        # X = sm.add_constant(X)  # Adds an intercept term
+        
+        # Cov Matrix for final predictors of heart dataset
+        plot_and_save_covariance_matrix(X, filepath='./PVM/Plots/heart_covariance_matrix.png')
         
         # Store both final X_list (order preserved) and final y variables in global lists
         global FINAL_HEART_REGRESSORS
@@ -414,11 +481,16 @@ class HEART:
         global FINAL_HEART_Y
         FINAL_HEART_Y = ['Heart Attack Risk']
         
-        # Check if final preprocessing has been done correctly
-        save_dataframe(processed_df, os.getcwd()+"/Heart_Attack_Predictor/Datasets", "heart_preprocessed_final.csv")
+        # Store to global df
+        global FINAL_HEART_PREDICTOR_DATAFRAME
+        FINAL_HEART_PREDICTOR_DATAFRAME = X
         
-        return processed_df
-    
+        # Check if final preprocessing has been done correctly
+        save_dataframe(processed_df, os.getcwd()+"/PVM/Datasets", "heart_preprocessed_final.csv")
+        save_dataframe(X, os.getcwd()+"/PVM/Datasets", "heart_preprocessed_X.csv")
+        
+        return processed_df, X
+
 class oos_testing:
     def split_test_train_data(self, df: pd.DataFrame, target_column, test_size=0.2, random_state=42):
         """
