@@ -180,73 +180,6 @@ class VectorQuantizer(nn.Module):
         
         return loss, quantized, perplexity, encoding_indices
     
-class VectorQuantizerEMA(nn.Module):
-    def __init__(self, num_embeddings, embedding_dim, commitment_cost, decay, epsilon=1e-5):
-        super(VectorQuantizerEMA, self).__init__()
-        
-        self._embedding_dim = embedding_dim
-        self._num_embeddings = num_embeddings
-        
-        self._embedding = nn.Embedding(self._num_embeddings, self._embedding_dim)
-        self._embedding.weight.data.normal_()
-        self._commitment_cost = commitment_cost
-        
-        self.register_buffer('_ema_cluster_size', torch.zeros(num_embeddings))
-        self._ema_w = nn.Parameter(torch.Tensor(num_embeddings, self._embedding_dim))
-        self._ema_w.data.normal_()
-        
-        self._decay = decay
-        self._epsilon = epsilon
-
-    def forward(self, inputs):
-        # convert inputs from BCHW -> BHWC
-        inputs = inputs.permute(0, 2, 3, 1).contiguous()
-        input_shape = inputs.shape
-        
-        # Flatten input
-        flat_input = inputs.view(-1, self._embedding_dim)
-        
-        # Calculate distances
-        distances = (torch.sum(flat_input**2, dim=1, keepdim=True) 
-                    + torch.sum(self._embedding.weight**2, dim=1)
-                    - 2 * torch.matmul(flat_input, self._embedding.weight.t()))
-            
-        # Encoding
-        encoding_indices = torch.argmin(distances, dim=1).unsqueeze(1)
-        encodings = torch.zeros(encoding_indices.shape[0], self._num_embeddings, device=inputs.device)
-        encodings.scatter_(1, encoding_indices, 1)
-        
-        # Quantize and unflatten
-        quantized = torch.matmul(encodings, self._embedding.weight).view(input_shape)
-        
-        # Use EMA to update the embedding vectors
-        if self.training:
-            self._ema_cluster_size = self._ema_cluster_size * self._decay + \
-                                     (1 - self._decay) * torch.sum(encodings, 0)
-            
-            # Laplace smoothing of the cluster size
-            n = torch.sum(self._ema_cluster_size.data)
-            self._ema_cluster_size = (
-                (self._ema_cluster_size + self._epsilon)
-                / (n + self._num_embeddings * self._epsilon) * n)
-            
-            dw = torch.matmul(encodings.t(), flat_input)
-            self._ema_w = nn.Parameter(self._ema_w * self._decay + (1 - self._decay) * dw)
-            
-            self._embedding.weight = nn.Parameter(self._ema_w / self._ema_cluster_size.unsqueeze(1))
-        
-        # Loss
-        e_latent_loss = F.mse_loss(quantized.detach(), inputs)
-        loss = self._commitment_cost * e_latent_loss
-        
-        # Straight Through Estimator
-        quantized = inputs + (quantized - inputs).detach()
-        avg_probs = torch.mean(encodings, dim=0)
-        perplexity = torch.exp(-torch.sum(avg_probs * torch.log(avg_probs + 1e-10)))
-        
-        # convert quantized from BHWC -> BCHW
-        return loss, quantized.permute(0, 3, 1, 2).contiguous(), perplexity, encodings
-    
 class Residual(nn.Module):
     def __init__(self, in_channels, num_hiddens, num_residual_hiddens):
         super(Residual, self).__init__()
@@ -295,6 +228,19 @@ class Decoder(nn.Module):
         x = self.fc2(x)
         return x
     
+# class Model(nn.Module):
+#     def __init__(self, num_features, num_hiddens, num_embeddings, embedding_dim, commitment_cost):
+#         super(Model, self).__init__()
+#         self.encoder = Encoder(num_features, num_hiddens, embedding_dim)
+#         self.vq_vae = VectorQuantizer(num_embeddings, embedding_dim, commitment_cost)
+#         self.decoder = Decoder(embedding_dim, num_features)
+
+#     def forward(self, x):
+#         z = self.encoder(x)
+#         loss, quantized, perplexity, _ = self.vq_vae(z)
+#         x_recon = self.decoder(quantized)
+#         return loss, x_recon, perplexity
+    
 class Model(nn.Module):
     def __init__(self, num_features, num_hiddens, num_embeddings, embedding_dim, commitment_cost):
         super(Model, self).__init__()
@@ -304,9 +250,9 @@ class Model(nn.Module):
 
     def forward(self, x):
         z = self.encoder(x)
-        loss, quantized, perplexity, _ = self.vq_vae(z)
+        loss, quantized, perplexity, encoding_indices = self.vq_vae(z)
         x_recon = self.decoder(quantized)
-        return loss, x_recon, perplexity
+        return loss, x_recon, perplexity, encoding_indices
     
 class Trainer:
     def train(self):
@@ -340,7 +286,7 @@ class Trainer:
             data = data.to(device)
             randhie_optimizer.zero_grad()
 
-            vq_loss, data_recon, perplexity = randhie_model.forward(data)
+            vq_loss, data_recon, perplexity, _ = randhie_model.forward(data)
             recon_error = F.mse_loss(data_recon, data) / randhie_variance
             loss = recon_error + vq_loss
             loss.backward()
@@ -379,9 +325,7 @@ class Trainer:
         randhie_valid_originals = randhie_valid_originals.to(device)
 
         # Run the batch through the model to get the reconstructions
-        randhie_vq_output_eval = randhie_model._pre_vq_conv(randhie_model._encoder(randhie_valid_originals))
-        _, randhie_valid_quantize, _, _ = randhie_model._vq_vae(randhie_vq_output_eval)
-        randhie_valid_reconstructions = randhie_model._decoder(randhie_valid_quantize)
+        _, randhie_valid_reconstructions, _, _ = randhie_model.forward(randhie_valid_originals)
 
         # Convert tensors to dataframes
         randhie_valid_originals_df = tensor_to_df(randhie_valid_originals, randhie_columns)
@@ -389,7 +333,7 @@ class Trainer:
 
         # Visualization: Compare original and reconstructed values for the first n rows
         n = 5  # Number of rows you want to visualize
-        fig, axes = plt.subplots(nrows=n, ncols=2, figsize=(10, 2*n))
+        fig, axes = plt.subplots(nrows=n, ncols=2, figsize=(20, 2*n))
 
         for i in range(n):
             # Original data visualization
@@ -408,7 +352,7 @@ class Trainer:
                 NUM_EMBEDDINGS, EMBEDDING_DIM, 
                 COMMITMENT_COST).to(device)
         # Optimizer
-        heart_optimizer = optim.Adam(randhie_model.parameters(), lr=LEARNING_RATE, amsgrad=False)
+        heart_optimizer = optim.Adam(heart_model.parameters(), lr=LEARNING_RATE, amsgrad=False)
         
         heart_model.train()
         heart_train_res_recon_error = []
@@ -419,7 +363,7 @@ class Trainer:
             data = data.to(device)
             heart_optimizer.zero_grad()
 
-            vq_loss, data_recon, perplexity = heart_model.forward(data)
+            vq_loss, data_recon, perplexity, _ = heart_model.forward(data)
             recon_error = F.mse_loss(data_recon, data) / heart_variance
             loss = recon_error + vq_loss
             loss.backward()
@@ -458,17 +402,15 @@ class Trainer:
         heart_valid_originals = heart_valid_originals.to(device)
 
         # Run the batch through the model to get the reconstructions
-        heart_vq_output_eval = heart_model._pre_vq_conv(heart_model._encoder(heart_valid_originals))
-        _, heart_valid_quantize, _, _ = heart_model._vq_vae(heart_vq_output_eval)
-        heart_valid_reconstructions = heart_model._decoder(heart_valid_quantize)
+        _, heart_valid_reconstructions, _, _ = heart_model.forward(heart_valid_originals)
 
         # Convert tensors to dataframes
         heart_valid_originals_df = tensor_to_df(heart_valid_originals, heart_columns)
         heart_valid_reconstructions_df = tensor_to_df(heart_valid_reconstructions, heart_columns)
 
         # Visualization: Compare original and reconstructed values for the first n rows
-        n = 5  # Number of rows you want to visualize
-        fig, axes = plt.subplots(nrows=n, ncols=2, figsize=(10, 2*n))
+        n = 5  # Number of rows I want to visualize
+        fig, axes = plt.subplots(nrows=n, ncols=2, figsize=(20, 2*n))
 
         for i in range(n):
             # Original data visualization

@@ -15,8 +15,6 @@ from sklearn.compose import ColumnTransformer
 
 from .VQVAE import Trainer, DataFrameDataset
 
-from Preprocess.raw_dataframe_preprocessor import FINAL_RANDHIE_REGRESSORS, FINAL_RANDHIE_Y
-
 class DataFrameEncoder:
     def __init__(self):
         # Train and assign the randhie and heart VQ-VAE models
