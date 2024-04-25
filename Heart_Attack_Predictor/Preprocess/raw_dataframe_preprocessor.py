@@ -24,6 +24,9 @@ FINAL_RANDHIE_Y = []
 FINAL_HEART_REGRESSORS = []
 FINAL_HEART_Y = []
 
+def return_final_variables():
+    return FINAL_RANDHIE_REGRESSORS, FINAL_HEART_REGRESSORS, FINAL_RANDHIE_Y, FINAL_HEART_Y
+
 def standardize_dataframe(df, numerical_columns, exclude_columns):
     """
     A function to standardize specified numerical values in a DataFrame using z-score normalization,
@@ -406,7 +409,9 @@ class HEART:
         X = sm.add_constant(X)  # Adds an intercept term
         
         # Store both final X_list (order preserved) and final y variables in global lists
+        global FINAL_HEART_REGRESSORS
         FINAL_HEART_REGRESSORS = X_list
+        global FINAL_HEART_Y
         FINAL_HEART_Y = ['Heart Attack Risk']
         
         # Check if final preprocessing has been done correctly

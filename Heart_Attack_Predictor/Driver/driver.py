@@ -6,7 +6,7 @@ script_directory = os.path.dirname(os.path.abspath(__file__))
 projects_directory = os.path.dirname(script_directory)
 sys.path.append(projects_directory)
 
-from Preprocess import raw_dataframe_preprocessor
+from Preprocess import raw_dataframe_preprocessor, column_optimizer
 
 def main():
     # randhie dataset path
@@ -26,7 +26,12 @@ def main():
     
     heart_preprocessed = heart.preprocess(heart_path)
     
-    # print(f"preprocessed rand hie dataset: {randhie_preprocessed.head()}")
+    column_rearranger = column_optimizer.ColumnRearranger()
+    
+    # Rearrange columns of the right table such that it aligns most closely with the columns of the left table
+    heart_preprocessed_rearranged = column_rearranger.return_optimal_rearrangement(randhie_preprocessed, heart_preprocessed)
+    # Test if rearrangement was done correctly
+    raw_dataframe_preprocessor.save_dataframe(heart_preprocessed_rearranged, os.getcwd()+"/Heart_Attack_Predictor/Datasets", "heart_preprocessed_rearranged.csv")
 
 if __name__ == "__main__":
     main()
