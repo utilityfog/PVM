@@ -66,10 +66,10 @@ def run_model_pipeline_and_return_final_heart_predictors(heart_processor: raw_da
     # Define a dictionary to hold all the model prediction functions
     models = {
         'Lasso Logistic Regression': lasso_logistic_predict,
-        # 'Elastic Net Logistic Regression': elastic_net_logistic_predict,
-        # 'Support Vector Machine (RBF)': svm_rbf_predict,
-        # 'XGBoost': xgboost_predict,
-        # 'Simple Neural Network': simple_NN_predict,
+        'Elastic Net Logistic Regression': elastic_net_logistic_predict,
+        'Support Vector Machine (RBF)': svm_rbf_predict,
+        'XGBoost': xgboost_predict,
+        'Simple Neural Network': simple_NN_predict,
         'Transformer': transformer_predict
     }
 
