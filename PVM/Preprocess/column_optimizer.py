@@ -41,7 +41,7 @@ class ColumnRearranger:
 
         return df_right_bootstrapped
     
-    def return_optimal_rearrangement(self, df_left, df_right):
+    def return_optimal_rearrangement(self, df_left, df_right) -> pd.DataFrame:
         """
         This function rearranges the columns of df_right to best align with the column arrangement of df_left.
         It uses linear regression for numeric predictors and logistic regression for categorical predictors.
@@ -177,7 +177,7 @@ class ColumnRearranger:
             plt.text(pos, value + 0.01, f"{value:.2f}", ha='center', va='bottom')
         
         # Display the plot
-        plt.show()
+        plt.show(block=False)
         
         # Save the plot to a file
         plt.savefig('./PVM/Plots/column_rearrangement_test.png')

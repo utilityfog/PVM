@@ -14,7 +14,7 @@ import statsmodels.api as sm
 from sklearn.preprocessing import StandardScaler, OneHotEncoder
 from sklearn.compose import ColumnTransformer
 from sklearn.linear_model import LogisticRegression
-from sklearn.model_selection import train_test_split
+from sklearn.model_selection import KFold, train_test_split
 
 from torch.utils.data import DataLoader, TensorDataset
 
@@ -35,9 +35,11 @@ def return_final_variables():
 def return_final_predictor_dataframes():
     return FINAL_RANDHIE_PREDICTOR_DATAFRAME, FINAL_HEART_PREDICTOR_DATAFRAME
 
-def update_rearranged_final_predictor_dataframe(df):
+def update_heart_final_predictors(df, columns):
     global FINAL_HEART_PREDICTOR_DATAFRAME
     FINAL_HEART_PREDICTOR_DATAFRAME = df
+    global FINAL_HEART_REGRESSORS
+    FINAL_HEART_REGRESSORS = columns
 
 def standardize_dataframe(df, numerical_columns, exclude_columns):
     """
@@ -92,7 +94,7 @@ def encode_categorical(df, categorical_vars):
     categorical_df = df[categorical_vars]
     
     # Perform one-hot encoding for categorical variables, drop first ensures there is no multicolinearity
-    result = pd.get_dummies(categorical_df, dtype=float, drop_first=False)
+    result = pd.get_dummies(categorical_df, dtype=float, drop_first=True)
     
     return result
 
@@ -209,7 +211,7 @@ class RANDHIE:
         # Define independent variables based on the paper's model and available data
         X_vars = ['xage', 'linc', 'coins', 'black', 'female', 'educdec']
         X = df[X_vars]
-        # X = sm.add_constant(X)  # Adds a constant term to the predictor
+        X = sm.add_constant(X)  # Adds a constant intercept
 
         # Equation 1: Probit model for zero versus positive medical expenses
         model_1 = Probit(df['positive_med_exp'], X).fit()
@@ -252,13 +254,13 @@ class RANDHIE:
         df_cleaned = remove_nan_or_inf(df)
         print(f"DataFrame after removing NaN and inf values: {df_cleaned.head()}")
         # Test 0
-        save_dataframe(df_cleaned, os.getcwd()+"/PVM/Datasets", "randhie_preprocessed0.csv")
+        # save_dataframe(df_cleaned, os.getcwd()+"/PVM/Datasets", "randhie_preprocessed0.csv")
         
         # Average the numeric column values at the patient (zper) level since we are not interested in time and the RANDHIE experiment has 5 individual year observations for each patient
         collapsed_df = self.average_by_unique_patient(df_cleaned, "zper", RANDHIE_CATEGORICAL_VARIABLES)
         print(f"AVERAGED: {collapsed_df.head()}")
         # Test 1
-        save_dataframe(collapsed_df, os.getcwd()+"/PVM/Datasets", "randhie_preprocessed1.csv")
+        # save_dataframe(collapsed_df, os.getcwd()+"/PVM/Datasets", "randhie_preprocessed1.csv")
         
         # Re-Constructing Variables for the Four Equations from the Paper (must be done before standardization as it is affected by sign): ""
         collapsed_df['is_positive_med_exp'] = (collapsed_df['meddol'] > 0).astype(int)  # 1 if positive medical expenses, else 0
@@ -270,7 +272,7 @@ class RANDHIE:
         paper_variables_numeric = ['log_med_exp', 'log_inpatient_exp']
         print(f"processed_df's generated columns: {collapsed_df[paper_variables_numeric + paper_variables_categorical].head()}")
         # Test 2
-        save_dataframe(collapsed_df, os.getcwd()+"/PVM/Datasets", "randhie_preprocessed2.csv")
+        # save_dataframe(collapsed_df, os.getcwd()+"/PVM/Datasets", "randhie_preprocessed2.csv")
         
         # Standardize Numeric Columns: standardized_df = standardize_df(avg_df)
         new_numeric_columns = RANDHIE_NUMERIC_VARIABLES + paper_variables_numeric
@@ -280,7 +282,7 @@ class RANDHIE:
         # Add plan without standardization
         standardized_df['plan'] = collapsed_df['plan']
         # Test 3
-        save_dataframe(standardized_df, os.getcwd()+"/PVM/Datasets", "randhie_preprocessed3.csv")
+        # save_dataframe(standardized_df, os.getcwd()+"/PVM/Datasets", "randhie_preprocessed3.csv")
         
         # Combine standardized_df's child and fchild into one categorical column as they are redundant
         # Create a new categorical column combining 'child' and 'fchild'
@@ -299,7 +301,7 @@ class RANDHIE:
         for item in ['child', 'fchild', 'coins']:
             new_categorical_columns.remove(item)
         # Test 4
-        save_dataframe(standardized_df, os.getcwd()+"/PVM/Datasets", "randhie_preprocessed4.csv")
+        # save_dataframe(standardized_df, os.getcwd()+"/PVM/Datasets", "randhie_preprocessed4.csv")
         
         # One Hot Encoding categorical variables
         encoded_df = encode_categorical(standardized_df, new_categorical_columns)
@@ -323,24 +325,14 @@ class RANDHIE:
         X_list = list(X.columns)
         print(f"length of final randhie X: {len(X_list)}")
         # ['coins', 'person_type_adult', 'person_type_fchild', 'person_type_mchild', 'hlthg_0', 'hlthg_1', 'hlthf_0', 'hlthf_1', 'hlthp_0', 'hlthp_1', 'female_0', 'female_1', 'site_2', 'site_3', 'site_4', 'site_5', 'site_6', 'tookphys_0', 'tookphys_1', 'plan', 'xage', 'educdec', 'time', 'disea', 'physlm', 'mdeoff', 'lfam', 'lpi', 'logc', 'xghindx', 'linc', 'lnum', 'black', 'mhi']
-        # X = sm.add_constant(X)  # Adds an intercept term
+        X = sm.add_constant(X)  # Adds an intercept term
         
         # DataFrame for final predictors of randhie dataset
-        save_dataframe(X, os.getcwd()+"/PVM/Datasets", "randhie_preprocessed_X.csv")
-        plot_and_save_covariance_matrix(X, filepath='./PVM/Plots/randhie_covariance_matrix.png')
-        
-        # Store both final X_list (order preserved) and final y variables in global lists
-        global FINAL_RANDHIE_REGRESSORS 
-        FINAL_RANDHIE_REGRESSORS = X_list
-        global FINAL_RANDHIE_Y
-        FINAL_RANDHIE_Y = y_list
-        
-        # Store to global df
-        global FINAL_RANDHIE_PREDICTOR_DATAFRAME
-        FINAL_RANDHIE_PREDICTOR_DATAFRAME = X
+        # save_dataframe(X, os.getcwd()+"/PVM/Datasets", "randhie_preprocessed_X.csv")
+        # plot_and_save_covariance_matrix(X, filepath='./PVM/Plots/randhie_covariance_matrix.png')
         
         # Check if final preprocessing has been done correctly; includes both X and y
-        save_dataframe(processed_df, os.getcwd()+"/PVM/Datasets", "randhie_preprocessed_final.csv")
+        # save_dataframe(processed_df, os.getcwd()+"/PVM/Datasets", "randhie_preprocessed_final.csv")
         
         # THREE EQUATION MODEL ACCORDING TO PAPER: Health Insurance and the Demand for Medical Care
 
@@ -373,6 +365,17 @@ class RANDHIE:
         print(model_3.summary())
         print("\nModel 4: OLS regression for log of medical expenses for those with any inpatient expenses")
         print(model_4.summary())
+        
+        X.drop('const', axis=1, inplace=True) # Drop the constant intercept before returning or saving X
+        # Store both final X_list (order static) and final y variables in global lists
+        global FINAL_RANDHIE_REGRESSORS 
+        FINAL_RANDHIE_REGRESSORS = X_list
+        global FINAL_RANDHIE_Y
+        FINAL_RANDHIE_Y = y_list
+        
+        # Store to global df
+        global FINAL_RANDHIE_PREDICTOR_DATAFRAME
+        FINAL_RANDHIE_PREDICTOR_DATAFRAME = X
         
         return processed_df, X
     
@@ -415,7 +418,7 @@ class RANDHIE:
         return result
     
 class HEART:
-    def preprocess(self, df_path):
+    def preprocess(self, data_input):
         """
         Method that pre-processes the heart_attack_prediction_dataset.csv dataset
         
@@ -427,26 +430,42 @@ class HEART:
         
         Returns: pd.DataFrame
         """
+        save_covariance_matrix = True
         # Read
-        df = pd.read_csv(df_path)
+        if isinstance(data_input, str):
+            df = pd.read_csv(data_input)
+        elif isinstance(data_input, pd.DataFrame):
+            df = data_input
+            save_covariance_matrix = False
+        else:
+            raise ValueError("data_input must be a filepath string or a pandas DataFrame")
         print(f"Raw DataFrame: {df.head()}")
         
         # Remove rows with NaN or inf values
         df_cleaned = remove_nan_or_inf(df)
         print(f"DataFrame after removing NaN and inf values: {df_cleaned.head()}")
         # Test 0 
-        save_dataframe(df_cleaned, os.getcwd()+"/PVM/Datasets", "heart_preprocessed0.csv")
-        
+        # save_dataframe(df_cleaned, os.getcwd()+"/PVM/Datasets", "heart_preprocessed0.csv")
         # Get Log Income
         df_cleaned['Log_Income'] = np.log(df_cleaned['Income'])
         
+        ### Seperate systolic and diastolic blood pressure into their own variables and create an interaction term.
+        # Split the 'Blood Pressure' column into 'Systolic' and 'Diastolic'
+        df_cleaned[['Systolic', 'Diastolic']] = df_cleaned['Blood Pressure'].str.split('/', expand=True).astype(int)
+        
+        # Create interaction term by multiplying Systolic and Diastolic pressures
+        # df_cleaned['BP_Interaction'] = df_cleaned['Systolic'] * df_cleaned['Diastolic']
+        
+        # Drop unnecessary variables
+        df_cleaned.drop(['Patient ID', 'Blood Pressure', 'Income', 'Continent', 'Hemisphere'], axis=1, inplace=True)
+        
         # Standardize Numeric Columns: standardized_df = standardize_df(avg_df)
-        numeric_columns = HEART_NUMERIC_VARIABLES
+        numeric_columns = HEART_NUMERIC_VARIABLES + ['Systolic', 'Diastolic']
         categorical_columns = HEART_CATEGORICAL_VARIABLES
         standardized_df = standardize_dataframe(df_cleaned, numeric_columns, categorical_columns)
         print(f"STANDARDIZED - NEW: {standardized_df.head()}")
         # Test 1
-        save_dataframe(standardized_df, os.getcwd()+"/PVM/Datasets", "heart_preprocessed1.csv")
+        # save_dataframe(standardized_df, os.getcwd()+"/PVM/Datasets", "heart_preprocessed1.csv")
         
         # One Hot Encoding categorical variables
         encoded_df = encode_categorical(standardized_df, categorical_columns)
@@ -456,77 +475,53 @@ class HEART:
         processed_df = replace_encoded_categorical(standardized_df, encoded_df, categorical_columns)
         print(f"PROCESSED: {processed_df.head()}")
         
-        ### Seperate systolic and diastolic blood pressure into their own variables and create an interaction term.
-        # Split the 'Blood Pressure' column into 'Systolic' and 'Diastolic'
-        processed_df[['Systolic', 'Diastolic']] = processed_df['Blood Pressure'].str.split('/', expand=True).astype(int)
-        
-        # Create interaction term by multiplying Systolic and Diastolic pressures
-        processed_df['BP_Interaction'] = processed_df['Systolic'] * processed_df['Diastolic']
-        
-        # Drop unnecessary variables
-        processed_df = processed_df.drop(['Patient ID', 'Blood Pressure', 'Income', 'Continent', 'Hemisphere'], axis=1)
-
-        # Define independent variables
-        X_list = list(processed_df.columns)
-        X = processed_df[X_list]
-        print(f"final heart X: {X.head()}")
-        # X = sm.add_constant(X)  # Adds an intercept term
-        
-        # Cov Matrix for final predictors of heart dataset
-        plot_and_save_covariance_matrix(X, filepath='./PVM/Plots/heart_covariance_matrix.png')
-        
-        # Store both final X_list (order preserved) and final y variables in global lists
-        global FINAL_HEART_REGRESSORS
-        FINAL_HEART_REGRESSORS = X_list
         global FINAL_HEART_Y
         FINAL_HEART_Y = ['Heart Attack Risk']
         
-        # Store to global df
-        global FINAL_HEART_PREDICTOR_DATAFRAME
-        FINAL_HEART_PREDICTOR_DATAFRAME = X
+        y = processed_df[FINAL_HEART_Y]
         
-        # Check if final preprocessing has been done correctly
-        save_dataframe(processed_df, os.getcwd()+"/PVM/Datasets", "heart_preprocessed_final.csv")
-        save_dataframe(X, os.getcwd()+"/PVM/Datasets", "heart_preprocessed_X.csv")
-        
-        return processed_df, X
+        X = processed_df.drop(FINAL_HEART_Y, axis=1)
 
-class oos_testing:
-    def split_test_train_data(self, df: pd.DataFrame, target_column, test_size=0.2, random_state=42):
+        # Define independent variables
+        X_list = list(X.columns)
+        print(f"final heart X: {X.head()}")
+        global FINAL_HEART_REGRESSORS
+        FINAL_HEART_REGRESSORS = X_list
+        
+        # Tensorize
+        X_tensor = torch.tensor(X.values.astype(np.float32)) if isinstance(X, pd.DataFrame) else torch.tensor(X.astype(np.float32))
+        y_tensor = torch.tensor(y.values.astype(np.float32)) if isinstance(y, pd.DataFrame) else torch.tensor(y.astype(np.float32))
+        
+        # Cov Matrix for final predictors of heart dataset
+        if save_covariance_matrix:
+            plot_and_save_covariance_matrix(X, filepath='./PVM/Plots/heart_covariance_matrix.png')
+        
+        return processed_df, X, y, X_tensor, y_tensor
+
+class OOS(KFold):
+    def split(self, X: pd.DataFrame, y=None, groups=None):
         """
         Perform out-of-sample testing by dividing the dataset into training and testing data.
         """
-        # Separate the target variable (y) and the features (X)
-        X = df.drop(target_column, axis=1)
-        y = df[target_column]
-
-        # Normalize the data
-        scaler = StandardScaler()
-        X_scaled = scaler.fit_transform(X)
-
         # Split the data into training and testing sets
-        X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=test_size, random_state=random_state)
+        fold_indexes = super().split(X)
         
-        # Make PyTorch Tensors from numpy arrays or pandas DataFrames
-        X_train_tensor = torch.tensor(X_train.values.astype(np.float32)) if isinstance(X_train, pd.DataFrame) else torch.tensor(X_train.astype(np.float32))
-        y_train_tensor = torch.tensor(y_train.values.astype(np.int64)) if isinstance(y_train, pd.Series) else torch.tensor(y_train.astype(np.int64))
-        X_test_tensor = torch.tensor(X_test.values.astype(np.float32)) if isinstance(X_test, pd.DataFrame) else torch.tensor(X_test.astype(np.float32))
-        y_test_tensor = torch.tensor(y_test.values.astype(np.int64)) if isinstance(y_test, pd.Series) else torch.tensor(y_test.astype(np.int64))
+        df_train = pd.DataFrame()
+        df_test = pd.DataFrame()
 
-        # Define datasets and DataLoader
-        train_dataset = TensorDataset(X_train, y_train)
-        val_dataset = TensorDataset(X_test, y_test)
-        train_loader = DataLoader(train_dataset, batch_size=64, shuffle=True)
-        val_loader = DataLoader(val_dataset, batch_size=64, shuffle=False)
-        print("Training dataset shape:", X_train.shape, y_train.shape)
-        print("Validation dataset shape:", X_test.shape, y_test.shape)
-        print("Training dataset type:", type(X_train), type(y_train))
-        print("Validation dataset type:", type(X_test), type(y_test))
-        print('')
-        print("Object type of current x and y variables:", type(X_train))
-        print("Shape of X_train:", X_train.shape)
-        print("Shape of X_test:", X_test.shape)
-        print("Shape of y_train:", y_train.shape)
-        print("Shape of y_test:", y_test.shape)
-
-        return X_train, X_test, y_train, y_test, X_train_tensor, X_test_tensor, y_train_tensor, y_test_tensor, train_loader, val_loader
+        for train_index, test_index in fold_indexes:
+            df_train_value, df_test_value = X.iloc[train_index], X.iloc[test_index]
+            df_train = df_train._append(df_train_value, ignore_index=True)
+            df_test = df_test._append(df_test_value, ignore_index=True)
+        
+        df_train_tensor_raw = None
+        df_test_tensor_raw = None
+        
+        try:
+            # Make PyTorch Tensors from numpy arrays or pandas DataFrames
+            df_train_tensor_raw = torch.tensor(df_train.values.astype(np.float32)) if isinstance(df_train, pd.DataFrame) else torch.tensor(df_train.astype(np.float32))
+            df_test_tensor_raw = torch.tensor(df_test.values.astype(np.float32)) if isinstance(df_test, pd.DataFrame) else torch.tensor(df_test.astype(np.float32))
+        except:
+            print("Not yet ready for tensorization!")
+        
+        return super().split(X)

@@ -14,50 +14,32 @@ from torchvision import transforms
 from sklearn.preprocessing import StandardScaler, OneHotEncoder
 from sklearn.compose import ColumnTransformer
 
-# from .VQVAE import Trainer, DataFrameDataset
+from scipy.spatial.distance import cdist
 
 class RowMatcher:
-    def create_index(self, model, dataframe, device='gpu'):
-        # Fetch embeddings using the model
-        model.eval()
-        embeddings = []
-        with torch.no_grad():
-            for index in dataframe['encoded_vector'].unique():
-                # Fetch embedding corresponding to each unique index
-                embedding = model.vq_vae.embedding(torch.tensor([index], device=device)).squeeze().gpu().numpy()
-                embeddings.append(embedding)
-        
-        embeddings = np.stack(embeddings)
+    def __init__(self):
+        self.used_indices = set()
 
-        # Initialize the HNSW index
-        dim = embeddings.shape[1]
-        index = hnswlib.Index(space='l2', dim=dim)
-        index.init_index(max_elements=len(embeddings), ef_construction=200, M=16)
-        index.add_items(embeddings)
+    def retrieve_similar(self, df_randhie, df_heart):
+        """Retrieve most similar rows based on encoded vectors."""
+        combined_data = pd.DataFrame()
 
-        return index
-    
-    def retrieve_similar(df_randhie, df_heart, randhie_model, heart_model, heart_index, device='cpu'):
-        # Generate embeddings for the randhie data
-        randhie_embeddings = []
-        randhie_model.eval()
-        with torch.no_grad():
-            for idx in df_randhie['encoded_vector']:
-                embedding = randhie_model.vq_vae.embedding(torch.tensor([idx], device=device)).squeeze().cpu().numpy()
-                randhie_embeddings.append(embedding)
-        
-        randhie_embeddings = np.array(randhie_embeddings)
+        randhie_vectors = np.vstack(df_randhie['encoded_vector'].apply(np.array))
+        heart_vectors = np.vstack(df_heart['encoded_vector'].apply(np.array))
 
-        # Perform HNSW retrieval
-        labels, distances = heart_index.knn_query(randhie_embeddings, k=1)  # Retrieve the top 1 nearest neighbor
+        distances = cdist(randhie_vectors, heart_vectors, metric='euclidean')
 
-        # Extract matching rows from the heart dataframe
-        similar_rows = df_heart.iloc[labels.flatten()]
+        for i, distance_vector in enumerate(distances):
+            min_index = np.argmin([dist if idx not in self.used_indices else np.inf for idx, dist in enumerate(distance_vector)])
+            distance = distance_vector[min_index]
 
-        # Combine the data for easier inspection or further processing
-        combined_data = df_randhie.copy()
-        combined_data['matched_index'] = labels.flatten()
-        combined_data['distance'] = distances.flatten()
-        combined_data['matched_row'] = similar_rows.values.tolist()
+            # Check and append only if index has not been used
+            if min_index not in self.used_indices:
+                self.used_indices.add(min_index)
+                similar_row = df_heart.iloc[min_index]
+                combined_row = pd.concat([df_randhie.iloc[i], similar_row], axis=0)
+                combined_row['matched_index'] = min_index
+                combined_row['distance'] = distance
+                combined_data = combined_data._append(combined_row, ignore_index=True)
 
         return combined_data
