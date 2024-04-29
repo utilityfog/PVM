@@ -83,22 +83,19 @@ def run_model_pipeline_and_return_final_heart_predictors(heart_processor: raw_da
     for name, predict_func in models.items():
         print(f"Running {name}...")
         ensemble_models, metric = cross_validate_and_ensemble(predict_func, heart_path, heart_processor)
-        if isinstance(metric, dict):  # For models that return metrics as dict
-            results[name] = metric
+        if isinstance(metric, dict):  # For models that return metrics as a dictionary
+            results[name] = metric['auc']
         else:
-            results[name] = {'AUC': metric}
-        print(f"{name} completed. AUC: {metric}")
+            results[name] = metric  # If the metric is not a dict, store it directly
+        print(f"{name} completed. AUC: {results[name]}")
         model_objects[name] = ensemble_models
 
-    # Find the model with the best performance based on a chosen metric
-    # Assuming all models return 'AUC' as their metric for simplicity
-    best_models_id = max(results, key=lambda x: results[x].get('auc', 0))
-    # best_model_name = max(results, key=results.get)
-    best_model_metrics = results[best_models_id]
-    print(f"Best models are {best_models_id} with AUC: {best_model_metrics}")
     # Find the model with the best performance based on AUC
-    best_models = model_objects[best_models_id] # best_models: list(model)
-    print(f"Best models are {best_models_id}: {results[best_models_id]}")
+    best_models_id = max(results, key=lambda name: results[name])
+    best_model_metrics = results[best_models_id]
+    print(f"Best model is {best_models_id} with AUC: {best_model_metrics}")
+    
+    best_models = model_objects[best_models_id]
     
     # Ensemble the predictions from the best model list
     predictions = [model.predict_proba(heart_X)[:, 1] for model in best_models]

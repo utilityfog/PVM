@@ -2,6 +2,7 @@ import os
 from typing import List
 import pandas as pd
 import numpy as np
+from sklearn.metrics import classification_report, confusion_matrix
 import torch
 import torch.nn as nn
 import seaborn as sns
@@ -317,8 +318,9 @@ class RANDHIE:
             # We use one hot encoding instead of dummy encoding because vectorization is affected by that choice. We want to capture maximum information for each vectorized row
         processed_df.drop(['income', 'year', 'outpdol', 'drugdol', 'suppdol', 'mentdol', 'inpdol', 'meddol', 'totadm', 'num', 'ghindx', 'logc', 'fmde', 'lnmeddol', 'binexp', 'zper'], axis=1, inplace=True)
         print(f"processed_df columns: {list(processed_df.columns)}")
-        y_list = ['log_med_exp', 'log_inpatient_exp', 'is_positive_med_exp', 'is_positive_inpatient_exp', 'is_only_outpatient_exp']
-        X = processed_df.drop(y_list, axis=1)
+        # 'is_positive_med_exp', 'is_positive_inpatient_exp', 'is_only_outpatient_exp'
+        y_list = ['log_med_exp', 'log_inpatient_exp']
+        X = processed_df.drop(y_list+['is_positive_med_exp', 'is_positive_inpatient_exp', 'is_only_outpatient_exp'], axis=1)
         print(f"final randhie X: {X.head()}")
         
         # Final RANDHIE predictors
@@ -359,14 +361,27 @@ class RANDHIE:
         # Print summaries of the models
         # print("Model 1: Probit model for zero versus positive medical expenses")
         # print(lasso_log_model_1.summary())
+        
         print("\nModel 2: Probit model for having zero versus positive inpatient expense, given positive use of medical services")
-        # print(lasso_log_model_2.summary())
+        print("Lasso Logistic Regression Model Coefficients:")
+        print(lasso_log_model_2.coef_)
+        print("Intercept:", lasso_log_model_2.intercept_)
+        # Generating predictions to use in classification report
+        predictions = lasso_log_model_2.predict(X)
+        X.drop('const', axis=1, inplace=True) # Drop the constant intercept before returning or saving X
+        # Classification report
+        print("\nClassification Report:")
+        print(classification_report(df_pos_med_exp['is_positive_inpatient_exp'], predictions))
+        # Confusion Matrix
+        print("\nConfusion Matrix:")
+        print(confusion_matrix(df_pos_med_exp['is_positive_inpatient_exp'], predictions))
+        
         print("\nModel 3: OLS regression for log of positive medical expenses if only outpatient services are used")
         print(model_3.summary())
+        
         print("\nModel 4: OLS regression for log of medical expenses for those with any inpatient expenses")
         print(model_4.summary())
         
-        X.drop('const', axis=1, inplace=True) # Drop the constant intercept before returning or saving X
         # Store both final X_list (order static) and final y variables in global lists
         global FINAL_RANDHIE_REGRESSORS 
         FINAL_RANDHIE_REGRESSORS = X_list
