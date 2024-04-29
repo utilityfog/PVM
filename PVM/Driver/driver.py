@@ -134,8 +134,5 @@ def main():
 
 if __name__ == "__main__":
     ### Multiprocessing for deep learning
-    try:
-        mp.set_start_method('spawn')  # can also try 'forkserver'
-    except RuntimeError:
-        pass
+    freeze_support()
     main()

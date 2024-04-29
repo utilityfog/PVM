@@ -1,5 +1,6 @@
 # Future imports must come first
 from __future__ import print_function
+from multiprocessing import freeze_support
 
 # Standard library imports
 from six.moves import xrange
@@ -13,6 +14,7 @@ import statsmodels.api as sm
 import torch
 import torch.nn.functional as F
 import torch.multiprocessing as mp
+import inspect
 import torchvision
 import umap
 
@@ -50,83 +52,89 @@ def return_hyperparameters():
     """Return current hyperparameters"""
     return BATCH_SIZE, NUM_TRAINING_UPDATES, NUM_HIDDENS, EMBEDDING_DIM, LEARNING_RATE
 
-class DataFramePreprocessor:
-    def load_and_split(self, randhie_total_columns: pd.DataFrame, heart_predictor_columns: pd.DataFrame, heart_total_columns: pd.DataFrame):
-        """
-        This method must be called after the initial dataframe preprocessing stage!
-        """
-        # final_randhie_regressors, final_heart_regressors, final_randhie_y, final_heart_y = raw_dataframe_preprocessor.return_final_variables()
-        randhie_columns, heart_columns = raw_dataframe_preprocessor.return_final_predictor_dataframes()
-        
-        ### RANDHIE
-        # randhie_X_train, randhie_X_validation, randhie_y_train, randhie_y_validation = train_test_split(randhie_total_columns[final_randhie_regressors], randhie_total_columns[final_randhie_y], test_size=0.25, random_state=42)
-        randhie_train, randhie_validation = train_test_split(randhie_columns, test_size=0.25, random_state=42)
-        
-        # Converting the split dataframes into datasets
-        randhie_training_data = DataFrameDataset(randhie_train)
-        randhie_validation_data = DataFrameDataset(randhie_validation)
-        
-        # Bootstrap due to lack of data: Create weights for each row for the WeightedRandomSampler
-        randhie_weights = np.ones(len(randhie_training_data))
-        
-        # Create a sampler instance
-        randhie_sampler = WeightedRandomSampler(randhie_weights, num_samples=len(randhie_weights)*5, replacement=True)
 
-        # Create DataLoader instances
-        randhie_training_loader = DataLoader(randhie_training_data,
-                                    batch_size=BATCH_SIZE,
-                                    # num_workers=2,
-                                    sampler=randhie_sampler,
-                                    pin_memory=False)
+def load_and_split(randhie_total_columns: pd.DataFrame, heart_predictor_columns: pd.DataFrame, heart_total_columns: pd.DataFrame):
+    """
+    This method must be called after the initial dataframe preprocessing stage!
+    """
+    # final_randhie_regressors, final_heart_regressors, final_randhie_y, final_heart_y = raw_dataframe_preprocessor.return_final_variables()
+    randhie_columns, heart_columns = raw_dataframe_preprocessor.return_final_predictor_dataframes()
+    
+    ### RANDHIE
+    # randhie_X_train, randhie_X_validation, randhie_y_train, randhie_y_validation = train_test_split(randhie_total_columns[final_randhie_regressors], randhie_total_columns[final_randhie_y], test_size=0.25, random_state=42)
+    randhie_train, randhie_validation = train_test_split(randhie_columns, test_size=0.25, random_state=42)
+    
+    # Converting the split dataframes into datasets
+    randhie_training_data = DataFrameDataset(randhie_train)
+    randhie_validation_data = DataFrameDataset(randhie_validation)
+    
+    # Bootstrap due to lack of data: Create weights for each row for the WeightedRandomSampler
+    randhie_weights = np.ones(len(randhie_training_data))
+    
+    # Create a sampler instance
+    randhie_sampler = WeightedRandomSampler(randhie_weights, num_samples=len(randhie_weights)*5, replacement=True)
 
-        randhie_validation_loader = DataLoader(randhie_validation_data,
-                                    batch_size=128,
-                                    # num_workers=2,
-                                    shuffle=True,
-                                    pin_memory=False)
-        
-        # Compute the variance of the numerical data in the heart training dataset
-        randhie_data_numeric = randhie_training_data.dataframe.select_dtypes(include=[np.number])
-        # randhie_data_variance = np.var(randhie_data_numeric, axis=0)
-        # Flatten the numerical data and compute the overall variance
-        randhie_data_flattened = randhie_data_numeric.values.flatten()
-        randhie_total_variance = np.var(randhie_data_flattened)
-        
-        ### HEART
-        # heart_X_train, heart_X_validation, heart_y_train, heart_y_validation = train_test_split(heart_predictor_columns, heart_total_columns[final_heart_y], test_size=0.25, random_state=42)
-        heart_train, heart_validation = train_test_split(heart_columns, test_size=0.25, random_state=42)
-        
-        # Converting the split dataframes into datasets
-        heart_training_data = DataFrameDataset(heart_train)
-        heart_validation_data = DataFrameDataset(heart_validation)
-        
-        # Bootstrap due to lack of data: Create weights for each row for the WeightedRandomSampler
-        heart_weights = np.ones(len(heart_training_data))
-        
-        # Create a sampler instance
-        heart_sampler = WeightedRandomSampler(heart_weights, num_samples=len(heart_weights)*5, replacement=True)
+    # Create DataLoader instances
+    randhie_training_loader = DataLoader(randhie_training_data,
+                                batch_size=BATCH_SIZE,
+                                sampler=randhie_sampler,
+                                num_workers=16,
+                                persistent_workers=True
+                                )
+    
+    # print(f"load_and_split name: {inspect.stack()[1][3]}")
+    # print(__name__)
+    randhie_validation_loader = DataLoader(randhie_validation_data,
+                                batch_size=128,
+                                shuffle=True,
+                                num_workers=16,
+                                persistent_workers=True
+                                )
+    
+    # Compute the variance of the numerical data in the heart training dataset
+    randhie_data_numeric = randhie_training_data.dataframe.select_dtypes(include=[np.number])
+    # randhie_data_variance = np.var(randhie_data_numeric, axis=0)
+    # Flatten the numerical data and compute the overall variance
+    randhie_data_flattened = randhie_data_numeric.values.flatten()
+    randhie_total_variance = np.var(randhie_data_flattened)
+    
+    ### HEART
+    # heart_X_train, heart_X_validation, heart_y_train, heart_y_validation = train_test_split(heart_predictor_columns, heart_total_columns[final_heart_y], test_size=0.25, random_state=42)
+    heart_train, heart_validation = train_test_split(heart_columns, test_size=0.25, random_state=42)
+    
+    # Converting the split dataframes into datasets
+    heart_training_data = DataFrameDataset(heart_train)
+    heart_validation_data = DataFrameDataset(heart_validation)
+    
+    # Bootstrap due to lack of data: Create weights for each row for the WeightedRandomSampler
+    heart_weights = np.ones(len(heart_training_data))
+    
+    # Create a sampler instance
+    heart_sampler = WeightedRandomSampler(heart_weights, num_samples=len(heart_weights)*5, replacement=True)
 
-        # Create DataLoader instances
-        heart_training_loader = DataLoader(heart_training_data, 
-                                    batch_size=BATCH_SIZE,
-                                    # num_workers=2,
-                                    sampler=heart_sampler,
-                                    pin_memory=False)
+    # Create DataLoader instances
+    heart_training_loader = DataLoader(heart_training_data, 
+                                batch_size=BATCH_SIZE,
+                                sampler=heart_sampler,
+                                num_workers=16,
+                                persistent_workers=True
+                                )
 
-        heart_validation_loader = DataLoader(heart_validation_data,
-                                    batch_size=128,
-                                    # num_workers=2,
-                                    shuffle=True,
-                                    pin_memory=False)
-        
-        # Compute the variance of the numerical data in the heart training dataset
-        heart_data_numeric = heart_training_data.dataframe.select_dtypes(include=[np.number])
-        # heart_data_variance = np.var(heart_data_numeric, axis=0)
-        # Flatten the numerical data and compute the overall variance
-        heart_data_flattened = heart_data_numeric.values.flatten()
-        heart_total_variance = np.var(heart_data_flattened)
-        
-        return randhie_training_loader, randhie_validation_loader, heart_training_loader, heart_validation_loader, randhie_total_variance, heart_total_variance
+    heart_validation_loader = DataLoader(heart_validation_data,
+                                batch_size=128,
+                                shuffle=True,
+                                num_workers=16,
+                                persistent_workers=True
+                                )
+    
+    # Compute the variance of the numerical data in the heart training dataset
+    heart_data_numeric = heart_training_data.dataframe.select_dtypes(include=[np.number])
+    # heart_data_variance = np.var(heart_data_numeric, axis=0)
+    # Flatten the numerical data and compute the overall variance
+    heart_data_flattened = heart_data_numeric.values.flatten()
+    heart_total_variance = np.var(heart_data_flattened)
+    
+    return randhie_training_loader, randhie_validation_loader, heart_training_loader, heart_validation_loader, randhie_total_variance, heart_total_variance
 
 class DataFrameDataset(Dataset):
     """Custom Dataset for loading rows from a pandas DataFrame."""
@@ -259,9 +267,8 @@ class Trainer:
             return pd.DataFrame(tensor.detach().cpu().numpy(), columns=columns)
         
         # Load data loaders for both randhie and heart
-        dataframe_preprocessor = DataFramePreprocessor()
         randhie_columns, heart_columns, _, _ = raw_dataframe_preprocessor.return_final_variables()
-        randhie_training_loader, randhie_validation_loader, heart_training_loader, heart_validation_loader, randhie_variance, heart_variance = dataframe_preprocessor.load_and_split(randhie_total_columns, heart_predictor_columns, heart_total_columns)
+        randhie_training_loader, randhie_validation_loader, heart_training_loader, heart_validation_loader, randhie_variance, heart_variance = load_and_split(randhie_total_columns, heart_predictor_columns, heart_total_columns)
         
         device = torch.device("mps" if torch.backends.mps.is_available() else "cpu")
         
