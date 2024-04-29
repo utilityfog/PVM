@@ -1,15 +1,13 @@
 hhidpn - Household and person number combined unique identifier. One per person
-wave - Indicates the wave of the survey from which the data is derived. Each person can be measured at all waves but this varies.
+wave - Basically the year in which the person was interviewed. Indicates the wave of the survey from which the data is derived. Each person can be measured at all waves but this varies.
 mstat - Marital status of the respondent.
 cendiv - Census division code, geographical categorization of where the respondent lives.
 gender - Respondent's gender.
 rahispan - Indicates whether the respondent identifies as Hispanic.
 raracem - Respondent's race.
-iwbeg - Initial wave beginning, presumably the starting point for tracking the respondent in the study.
 dage_m - Age of the respondent in months at the date of survey.
 dage_y - Age of the respondent in years at the date of survey.
 raedyrs - Years of education completed by the respondent.
-rarelig - Respondent's religious affiliation.
 ravetrn - Indicates if the respondent is a veteran.
 agey_m - Age of the respondent in years and months (combined field).
 shlt - Self-reported health status.
@@ -34,21 +32,18 @@ conde - Composite score of various health conditions.
 cogtot - Total cognitive functioning score.
 slfmem - Self-reported memory score.
 pstmem - Posterior memory function score.
-spcfac - 
+spcfac - special health facility visits
 hsptim - Time spent in hospital.
-puff - Breathing ability.
+puff - Breathing test score.
 puffpos - Position while taking breath test.
 timwlk - Time taken to walk a specified distance.
 hatotb - Total household assets before taxes.
 iearn - Individual earnings.
 isret - Indicator of retirement status.
-covs - Coverage status, possibly insurance or similar.
+covs - Health insurance coverage status.
 hiltc - Health insurance long-term care coverage.
 lbrf - Labor force status.
 logiearn - Logarithm of individual earnings.
 logisret - Logarithm of social retirement benefits.
 loghspti - Logarithm of hospital time.
 loghatotb - Logarithm of total household assets before taxes.
-id - Unique identifier for each row.
-nt - Likely a network-related identifier, details not specified.
-n2 - Secondary network-related identifier, details not specified.
