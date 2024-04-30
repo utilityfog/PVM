@@ -75,12 +75,17 @@ def main():
     ### Adding the Vector Encoded Column that summarizes each row's data using VAE
     encoder = Encoder.DataFrameEncoder()
     # Train the models
-    encoder.train_and_assign_models(randhie_preprocessed, heart_X_rearranged, heart_preprocessed_whole)
+    # encoder.train_and_assign_models(randhie_preprocessed, heart_X_rearranged, heart_preprocessed_whole)
     # Save the models
-    encoder.save_model(encoder.randhie_model, 'randhie_model.pth')
-    encoder.save_model(encoder.heart_model, 'heart_model.pth')
-    # Add a vector encoding column to RANDHIE and HEART dataframes
-    encoded_randhie_df, encoded_heart_df = encoder.load_and_encode_dataframes(randhie_X, heart_X_rearranged)
+    # encoder.save_model(encoder.randhie_model, 'randhie_model.pth')
+    # encoder.save_model(encoder.heart_model, 'heart_model.pth')
+    
+    ## Add a vector encoding column to RANDHIE and HEART dataframes
+    
+    # HYPERPARAMETERS
+    batch_size, num_training_updates, num_hiddens, embedding_dim, learning_rate = VAE.return_hyperparameters()
+    device = torch.device("mps" if torch.backends.mps.is_available() else "cpu")
+    encoded_randhie_df, encoded_heart_df = encoder.load_and_encode_dataframes(randhie_X, heart_X_rearranged, 31, 43, num_hiddens, embedding_dim, device, learning_rate)
     
     raw_dataframe_preprocessor.save_dataframe(encoded_randhie_df, os.getcwd()+"/PVM/Datasets", "randhie_predictors.csv")
     print(f"{encoded_randhie_df.head()}")
@@ -97,18 +102,6 @@ def main():
     # heart_predictors_path = os.getcwd()+"/PVM/Datasets/heart_predictors.csv"
     # heart_predictors = encoded_heart_df
     # pd.read_csv(heart_predictors_path)
-    
-    # HYPERPARAMETERS
-    batch_size, num_training_updates, num_hiddens, embedding_dim, learning_rate = VAE.return_hyperparameters()
-    device = torch.device("mps" if torch.backends.mps.is_available() else "cpu")
-    
-    randhie_model = VAE.Model(31, num_hiddens, embedding_dim).to(device)
-    randhie_model.load_state_dict(torch.load('randhie_model.pth'))
-    randhie_model.eval()
-    
-    heart_model = VAE.Model(43, num_hiddens, embedding_dim).to(device)
-    heart_model.load_state_dict(torch.load('heart_model.pth'))
-    heart_model.eval()
 
     def match_rows(randhie_df, heart_df):
         row_matcher = Row_Matcher.RowMatcher()

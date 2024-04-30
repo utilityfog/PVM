@@ -1,3 +1,4 @@
+import inspect
 from multiprocessing import freeze_support
 import matplotlib.pyplot as plt
 import numpy as np
@@ -32,8 +33,7 @@ def test_research_null(combined_data: pd.DataFrame, final_randhie_regressors: pd
     """
         Summary: The results show that 
     """
-    
-    final_randhie_regressors[['Heart_Attack_Risk_Predicted', 'Stress Level', 'Sedentary Hours Per Day', 'Obesity_1', 'Cholesterol']] = final_heart_regressors[['Heart_Attack_Risk_Predicted', 'Stress Level', 'Sedentary Hours Per Day', 'Obesity_1', 'Cholesterol']]
+    final_randhie_regressors.loc[:, ['Heart_Attack_Risk_Predicted', 'Stress Level', 'Sedentary Hours Per Day', 'Obesity_1', 'Cholesterol']] = final_heart_regressors[['Heart_Attack_Risk_Predicted', 'Stress Level', 'Sedentary Hours Per Day', 'Obesity_1', 'Cholesterol']].values
     
     predictors = final_randhie_regressors
     print(f"Using predictors: {predictors}")
@@ -152,6 +152,8 @@ def cross_validate_and_ensemble(predict_func, heart_path: str, processor: raw_da
             _, heart_X_test_fold, heart_y_test_fold, heart_X_test_fold_tensor, heart_y_test_fold_tensor = processor.preprocess(heart_df_test_fold)
 
             model, auc = predict_func(heart_X_train_fold, heart_y_train_fold, heart_X_test_fold, heart_y_test_fold, heart_X_train_fold_tensor, heart_y_train_fold_tensor, heart_X_test_fold_tensor, heart_y_test_fold_tensor)
+            
+            torch.save(model.state_dict(), f'./PVM/{predict_func.__name__}_model.pth')
         else:
             # Other functions use just DataFrame input
             _, heart_X_train_fold, heart_y_train_fold, _, _ = processor.preprocess(heart_df_train_fold)
@@ -159,6 +161,7 @@ def cross_validate_and_ensemble(predict_func, heart_path: str, processor: raw_da
             _, heart_X_test_fold, heart_y_test_fold, _, _ = processor.preprocess(heart_df_test_fold)
 
             model, auc = predict_func(heart_X_train_fold, heart_y_train_fold, heart_X_test_fold, heart_y_test_fold, i)
+            
         i += 1
 
         # Store the model from the current fold
@@ -169,6 +172,21 @@ def cross_validate_and_ensemble(predict_func, heart_path: str, processor: raw_da
 
     # Calculate mean AUC across all folds
     mean_auc = np.mean(auc_scores)
+    
+    # Plotting
+    plt.figure(figsize=(10, 5))
+    plt.plot(range(1, n_splits+1), auc_scores, marker='o', linestyle='-', color='b')
+    plt.title(f'Mean AUC for {predict_func.__name__}')
+    plt.xlabel('Fold')
+    plt.ylabel('AUC Score')
+    plt.ylim([0, 1])
+    plt.xticks(range(1, n_splits+1))
+    plt.axhline(y=mean_auc, color='r', linestyle='--')
+    plt.text(n_splits-1, mean_auc+0.02, f'Mean AUC: {mean_auc:.4f}', color='r')
+    
+    # Save the plot
+    plt.savefig(f'./PVM/Plots/{predict_func.__name__}_mean_auc.png')
+    plt.close()
 
     return ensemble_models, mean_auc
 
@@ -206,7 +224,7 @@ def elastic_net_logistic_predict(X_train: pd.DataFrame, y_train: pd.DataFrame, X
     print("Elastic Net Logistic Prediction!")
     # Setup ElasticNetCV with more iterations
     model = ElasticNetCV(cv=5, l1_ratio=np.linspace(0.01, 1, 100), alphas=np.logspace(-6, 2, 100), 
-                         max_iter=500, tol=0.0001, random_state=42)
+                         max_iter=500, tol=0.005, random_state=42)
     
     model.fit(X_train, np.ravel(y_train,order='C'))
     
@@ -322,23 +340,31 @@ def simple_NN_predict(X_train: pd.DataFrame, y_train: pd.DataFrame, X_test: pd.D
             return torch.sigmoid(self.fc3(x))  # Sigmoid for binary classification
 
     model = SimpleNN(X_train_tensor.shape[1]).to(device)
-    optimizer = torch.optim.Adam(model.parameters(), lr=learning_rate)
-    criterion = nn.BCELoss()
+    try:
+        frame = inspect.stack()[1]
+        method_name = frame[3]
+        model.load_state_dict(torch.load(f'./PVM/{method_name}_model.pth'))
+    except:
+        pass
+    
+    if model is None:
+        optimizer = torch.optim.Adam(model.parameters(), lr=learning_rate)
+        criterion = nn.BCELoss()
 
-    # Training loop
-    model.train()
-    for epoch in range(num_training_updates):
-        for data, target in train_loader:
-            # Move data to the device each batch
-            data = data.to(device)
-            target = target.to(device)
-            
-            optimizer.zero_grad()
-            output = model.forward(data)
-            loss = criterion(output, target)
-            # print(f"NN training loss: {loss}")
-            loss.backward()
-            optimizer.step()
+        # Training loop
+        model.train()
+        for epoch in range(num_training_updates):
+            for data, target in train_loader:
+                # Move data to the device each batch
+                data = data.to(device)
+                target = target.to(device)
+                
+                optimizer.zero_grad()
+                output = model.forward(data)
+                loss = criterion(output, target)
+                # print(f"NN training loss: {loss}")
+                loss.backward()
+                optimizer.step()
 
     # Evaluation
     model.eval()
@@ -377,12 +403,6 @@ def transformer_predict(X_train: pd.DataFrame, y_train: pd.DataFrame, X_test: pd
     train_dataset = TensorDataset(X_train_tensor, y_train_tensor)
     train_loader = DataLoader(train_dataset, batch_size=batch_size, shuffle=True, num_workers=16, persistent_workers=True)
     
-    if __name__ == '__main__':
-        freeze_support()
-        train_loader = DataLoader(
-            train_dataset, batch_size=batch_size, shuffle=True, num_workers=8
-        )
-    
     # print("Fully read DataLoader!")
 
     # Transformer Model
@@ -402,23 +422,31 @@ def transformer_predict(X_train: pd.DataFrame, y_train: pd.DataFrame, X_test: pd
             return torch.sigmoid(self.classifier(x))  # Use sigmoid for binary classification
 
     model = TransformerModel(X_train_tensor.shape[1], 1).to(device)
-    optimizer = optim.Adam(model.parameters(), lr=learning_rate)
-    criterion = nn.BCELoss()
+    try:
+        frame = inspect.stack()[1]
+        method_name = frame[3]
+        model.load_state_dict(torch.load(f'./PVM/{method_name}_model.pth'))
+    except:
+        pass
 
-    # Training loop
-    model.train()
-    for epoch in range(num_training_updates):
-        for data, target in train_loader:
-            # Move data to the device each batch
-            data = data.to(device)
-            target = target.to(device)
-            
-            optimizer.zero_grad()
-            output = model.forward(data)
-            loss = criterion(output, target)  # Ensure output and target shapes are aligned
-            print(f"transformer training loss: {loss}")
-            loss.backward()
-            optimizer.step()
+    if model is None:
+        optimizer = optim.Adam(model.parameters(), lr=learning_rate)
+        criterion = nn.BCELoss()
+        
+        # Training loop
+        model.train()
+        for epoch in range(num_training_updates):
+            for data, target in train_loader:
+                # Move data to the device each batch
+                data = data.to(device)
+                target = target.to(device)
+                
+                optimizer.zero_grad()
+                output = model.forward(data)
+                loss = criterion(output, target)  # Ensure output and target shapes are aligned
+                print(f"transformer training loss: {loss}")
+                loss.backward()
+                optimizer.step()
 
     # Evaluate
     model.eval()

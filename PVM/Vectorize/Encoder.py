@@ -13,7 +13,7 @@ from torchvision import transforms
 from sklearn.preprocessing import StandardScaler, OneHotEncoder
 from sklearn.compose import ColumnTransformer
 
-from .VAE import Trainer, DataFrameDataset
+from .VAE import Trainer, DataFrameDataset, Model
 
 class DataFrameEncoder:
     def __init__(self):
@@ -47,10 +47,19 @@ class DataFrameEncoder:
         # Save the model to the specified path
         torch.save(model.state_dict(), path)
 
-    def load_and_encode_dataframes(self, randhie_df, heart_df):
+    def load_and_encode_dataframes(self, randhie_df, heart_df, input_dim_rand, input_dim_heart, num_hiddens, embedding_dim, device, learning_rate):
         # Load the trained models
+        self.device = device
+        
+        self.randhie_model = Model(input_dim_rand, num_hiddens, embedding_dim).to(self.device)
         self.randhie_model.load_state_dict(torch.load('randhie_model.pth'))
+        optimizer = torch.optim.Adam(self.randhie_model.parameters(), lr=learning_rate)
+        criterion = nn.BCELoss()
+        
+        self.heart_model = Model(input_dim_heart, num_hiddens, embedding_dim).to(self.device)
         self.heart_model.load_state_dict(torch.load('heart_model.pth'))
+        optimizer = torch.optim.Adam(self.heart_model.parameters(), lr=learning_rate)
+        criterion = nn.BCELoss()
 
         # Encode the dataframes
         encoded_randhie_df = self.encode_dataframe(randhie_df, self.randhie_model)
