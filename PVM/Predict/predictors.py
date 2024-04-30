@@ -54,17 +54,16 @@ def test_research_null(combined_data: pd.DataFrame, final_randhie_regressors: pd
 
         y_pred = results.predict(X_with_const)
         mse = mean_squared_error(y, y_pred)
-
         # regression_results[target] = {
         #     'Summary': results.summary(),
         #     'MSE': mse
         # }
-        
         regression_results[target] = results
         
     # Plotting regression results
     for target, results in regression_results.items():
         fig, ax = plt.subplots(figsize=(10, 8))
+        print(f"results: {results.summary()}")
         coefs = results.params
         conf = results.conf_int()
         err = (conf[1] - conf[0]) / 2
