@@ -33,10 +33,11 @@ def test_research_null(combined_data: pd.DataFrame, final_randhie_regressors: pd
     """
         Summary: The results show that 
     """
-    final_randhie_regressors.loc[:, ['Heart_Attack_Risk_Predicted', 'Stress Level', 'Sedentary Hours Per Day', 'Obesity_1', 'Cholesterol']] = final_heart_regressors[['Heart_Attack_Risk_Predicted', 'Stress Level', 'Sedentary Hours Per Day', 'Obesity_1', 'Cholesterol']].values
+    final_randhie_regressors.loc[:, ['Log_Income', 'Heart_Attack_Risk_Predicted', 'Stress Level', 'Sedentary Hours Per Day', 'Obesity_1', 'Cholesterol', 'Previous Heart Problems_1', 'Physical Activity Days Per Week', 'Medication Use_1', 'Sleep Hours Per Day']] = final_heart_regressors[['Log_Income', 'Heart_Attack_Risk_Predicted', 'Stress Level', 'Sedentary Hours Per Day', 'Obesity_1', 'Cholesterol', 'Previous Heart Problems_1', 'Physical Activity Days Per Week', 'Medication Use_1', 'Sleep Hours Per Day']].values
     
     predictors = final_randhie_regressors
     print(f"Using predictors: {predictors}")
+    print(f"final y: {list(final_randhie_y.columns)}")
 
     regression_results = {}
 
@@ -78,11 +79,12 @@ def run_model_pipeline_and_return_final_heart_predictors(heart_processor: raw_da
     # Results dictionary to track model performance
     results = {}
     model_objects = {}
-
+    
+    device = None
     # Run each model and collect results
     for name, predict_func in models.items():
         print(f"Running {name}...")
-        ensemble_models, metric = cross_validate_and_ensemble(predict_func, heart_path, heart_processor)
+        ensemble_models, metric, device = cross_validate_and_ensemble(predict_func, heart_path, heart_processor)
         if isinstance(metric, dict):  # For models that return metrics as a dictionary
             results[name] = metric['auc']
         else:
@@ -98,8 +100,25 @@ def run_model_pipeline_and_return_final_heart_predictors(heart_processor: raw_da
     best_models = model_objects[best_models_id]
     
     # Ensemble the predictions from the best model list
-    predictions = [model.predict_proba(heart_X)[:, 1] for model in best_models]
-    mean_predictions = np.mean(predictions, axis=0)
+    for model in best_models:
+        # print(f"model name: {model}")
+        i = 2
+        for model_name in ['simple_NN_predict', 'transformer_predict']:
+            if model_name not in f"{model}":
+                i -= 1
+        if i == 0:
+            # Non-Deep Learning Model Selected for Prediction
+            predictions = [model.predict_proba(heart_X)[:, 1] for model in best_models]
+            mean_predictions = np.mean(predictions, axis=0)
+        else:
+            # Deep Learning Model Selected for Prediction
+            model.eval()
+            with torch.no_grad():
+                # Tensorize
+                heart_X_tensor = torch.tensor(heart_X.astype(np.float32)) if isinstance(heart_X, pd.DataFrame) else torch.tensor(heart_X.astype(np.float32)).to(device)
+                predictions = model.forward(heart_X_tensor)
+                predictions_unloaded = predictions.cpu()
+                mean_predictions = np.mean(predictions_unloaded, axis=0)
 
     # Add predictions as a new column to heart_X
     heart_X['Heart_Attack_Risk_Predicted'] = mean_predictions
@@ -142,7 +161,7 @@ def cross_validate_and_ensemble(predict_func, heart_path: str, processor: raw_da
     i = 0
     for train_fold_index, test_fold_index in kf.split(heart_df):
         heart_df_train_fold, heart_df_test_fold = heart_df.iloc[train_fold_index], heart_df.iloc[test_fold_index]
-        
+        device = None
         if predict_func.__name__ in ['simple_NN_predict', 'transformer_predict']:
             # These functions require tensor data
             _, heart_X_train_fold, heart_y_train_fold, heart_X_train_fold_tensor, heart_y_train_fold_tensor = processor.preprocess(heart_df_train_fold)
@@ -151,9 +170,10 @@ def cross_validate_and_ensemble(predict_func, heart_path: str, processor: raw_da
         
             _, heart_X_test_fold, heart_y_test_fold, heart_X_test_fold_tensor, heart_y_test_fold_tensor = processor.preprocess(heart_df_test_fold)
 
-            model, auc = predict_func(heart_X_train_fold, heart_y_train_fold, heart_X_test_fold, heart_y_test_fold, heart_X_train_fold_tensor, heart_y_train_fold_tensor, heart_X_test_fold_tensor, heart_y_test_fold_tensor)
+            model, auc, model_saved, device = predict_func(heart_X_train_fold, heart_y_train_fold, heart_X_test_fold, heart_y_test_fold, heart_X_train_fold_tensor, heart_y_train_fold_tensor, heart_X_test_fold_tensor, heart_y_test_fold_tensor)
             
-            torch.save(model.state_dict(), f'./PVM/{predict_func.__name__}_model.pth')
+            if not model_saved:
+                torch.save(model.state_dict(), f'./PVM/{predict_func.__name__}_model.pth')
         else:
             # Other functions use just DataFrame input
             _, heart_X_train_fold, heart_y_train_fold, _, _ = processor.preprocess(heart_df_train_fold)
@@ -188,7 +208,7 @@ def cross_validate_and_ensemble(predict_func, heart_path: str, processor: raw_da
     plt.savefig(f'./PVM/Plots/{predict_func.__name__}_mean_auc.png')
     plt.close()
 
-    return ensemble_models, mean_auc
+    return ensemble_models, mean_auc, device
 
 def lasso_logistic_predict(X_train: pd.DataFrame, y_train: pd.DataFrame, X_test: pd.DataFrame, y_test: pd.DataFrame, fold_index):
     print("LASSO Logistic Prediction!")
@@ -347,7 +367,9 @@ def simple_NN_predict(X_train: pd.DataFrame, y_train: pd.DataFrame, X_test: pd.D
     except:
         pass
     
+    model_saved = True
     if model is None:
+        model_saved = False
         optimizer = torch.optim.Adam(model.parameters(), lr=learning_rate)
         criterion = nn.BCELoss()
 
@@ -376,7 +398,7 @@ def simple_NN_predict(X_train: pd.DataFrame, y_train: pd.DataFrame, X_test: pd.D
         y_test_unloaded = y_test_tensor.cpu()
         auc_score = roc_auc_score(y_test_unloaded, predictions_unloaded)
 
-    return model, {'auc': auc_score}
+    return model, {'auc': auc_score}, model_saved, device
     
 def transformer_predict(X_train: pd.DataFrame, y_train: pd.DataFrame, X_test: pd.DataFrame, y_test: pd.DataFrame, X_train_tensor: torch.Tensor, y_train_tensor: torch.Tensor, X_test_tensor: torch.Tensor, y_test_tensor: torch.Tensor):
     print("Transformer Prediction!")
@@ -428,8 +450,9 @@ def transformer_predict(X_train: pd.DataFrame, y_train: pd.DataFrame, X_test: pd
         model.load_state_dict(torch.load(f'./PVM/{method_name}_model.pth'))
     except:
         pass
-
+    model_saved = True
     if model is None:
+        model_saved = False
         optimizer = optim.Adam(model.parameters(), lr=learning_rate)
         criterion = nn.BCELoss()
         
@@ -457,4 +480,4 @@ def transformer_predict(X_train: pd.DataFrame, y_train: pd.DataFrame, X_test: pd
         y_test_unloaded = y_test_tensor.cpu()
         auc_score = roc_auc_score(y_test_unloaded, predictions_unloaded)
 
-    return model, {'auc': auc_score}
+    return model, {'auc': auc_score}, model_saved, device

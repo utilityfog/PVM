@@ -72,6 +72,8 @@ def main():
     # Visualize if rearrangement was done correctly
     raw_dataframe_preprocessor.save_dataframe(heart_X_rearranged, os.getcwd()+"/PVM/Datasets", "heart_preprocessed_X_rearranged.csv")
     
+    print(f"final heart X rearranged columns: {list(heart_X_rearranged.columns)}")
+    
     ### Adding the Vector Encoded Column that summarizes each row's data using VAE
     encoder = Encoder.DataFrameEncoder()
     # Train the models

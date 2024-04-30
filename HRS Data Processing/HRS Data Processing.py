@@ -1,5 +1,6 @@
 import pandas as pd
 import numpy as np
+from sklearn.preprocessing import StandardScaler
 
 hrs = pd.read_csv("life_expectancy_CleanedHRSdata.csv")
 pd.set_option('display.max_columns', None)

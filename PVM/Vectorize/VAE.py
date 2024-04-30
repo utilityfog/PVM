@@ -7,6 +7,8 @@ from six.moves import xrange
 
 # Third-party imports
 import matplotlib.pyplot as plt
+import matplotlib.patches as mpatches
+import matplotlib.colors as colors
 import numpy as np
 import pandas as pd
 import scipy.signal as sg
@@ -332,22 +334,58 @@ class Trainer:
         randhie_valid_reconstructions_df = tensor_to_df(randhie_valid_reconstructions, randhie_columns)
 
         # Visualization: Compare original and reconstructed values for the first n rows
-        n = 5
-        fig, axes = plt.subplots(nrows=n, ncols=2, figsize=(20, 2*n))
+        # n = 5
+        # fig, axes = plt.subplots(nrows=n, ncols=2, figsize=(20, 2*n))
+
+        # for i in range(n):
+        #     # Original data visualization
+        #     axes[i, 0].set_title(f'Original Row Validation {i}')
+        #     axes[i, 0].bar(randhie_valid_originals_df.columns, randhie_valid_originals_df.iloc[i], color='blue')
+            
+        #     # Reconstructed data visualization
+        #     axes[i, 1].set_title(f'Reconstructed Row Validation {i}')
+        #     axes[i, 1].bar(randhie_valid_reconstructions_df.columns, randhie_valid_reconstructions_df.iloc[i], color='orange')
+
+        # plt.tight_layout()
+        # # plt.show()
+        
+        # # Save the plot to a file
+        # plt.savefig('./PVM/Plots/randhie_recon_validation.png')
+        # plt.close()
+        
+        n = 5  # Number of rows I want to visualize
+        num_columns = len(randhie_valid_originals_df.columns)
+        fig, axes = plt.subplots(nrows=n, ncols=2, figsize=(20, 2 * n))
+
+        # Ensure we generate enough colors by repeating the color sequence
+        # DEPRECATED: base_colors = plt.cm.tab10(np.linspace(0, 1, 10))  # 10 base colors from the tab10 colormap
+        # Also DEPRECATED: base_colors = colors.LinearSegmentedColormap.from_list(
+        #     "tab10", ["red", "green", "blue", "purple", "orange", "yellow", "cyan", "magenta", "brown", "gray"]
+        # )
+        
+        # Use a colormap and create specific colors for each column
+        base_colors = plt.cm.get_cmap('tab10', 10)
+        color_sequence = [base_colors(i % 10) for i in range(num_columns)]
+        # plt.imshow(np.random.rand(10, 10), cmap=base_colors)
+        # plt.colorbar()
+        # Create legend patches for each column using the generated colors
+        legend_patches = [mpatches.Patch(color=color_sequence[i], label=randhie_valid_originals_df.columns[i]) for i in range(num_columns)]
+        plt.figlegend(handles=legend_patches, loc='lower center', ncol=5, fontsize='small', title='Column Legend')
 
         for i in range(n):
-            # Original data visualization
+            # Visualization of original data
             axes[i, 0].set_title(f'Original Row Validation {i}')
-            axes[i, 0].bar(randhie_valid_originals_df.columns, randhie_valid_originals_df.iloc[i], color='blue')
-            
-            # Reconstructed data visualization
-            axes[i, 1].set_title(f'Reconstructed Row Validation {i}')
-            axes[i, 1].bar(randhie_valid_reconstructions_df.columns, randhie_valid_reconstructions_df.iloc[i], color='orange')
+            axes[i, 0].bar(randhie_valid_originals_df.columns, randhie_valid_originals_df.iloc[i], color=color_sequence)
 
-        plt.tight_layout()
-        # plt.show()
-        
-        # Save the plot to a file
+            # Visualization of reconstructed data
+            axes[i, 1].set_title(f'Reconstructed Row Validation {i}')
+            axes[i, 1].bar(randhie_valid_reconstructions_df.columns, randhie_valid_reconstructions_df.iloc[i], color=color_sequence)
+
+            # Improve label readability
+            axes[i, 0].set_xticklabels(randhie_valid_originals_df.columns, rotation=90)
+            axes[i, 1].set_xticklabels(randhie_valid_reconstructions_df.columns, rotation=90)
+
+        plt.tight_layout(rect=[0, 0.03, 1, 0.95])  # Adjust layout to accommodate legend
         plt.savefig('./PVM/Plots/randhie_recon_validation.png')
         plt.close()
         
@@ -411,22 +449,59 @@ class Trainer:
         heart_valid_reconstructions_df = tensor_to_df(heart_valid_reconstructions, heart_columns)
 
         # Visualization: Compare original and reconstructed values for the first n rows
+        # n = 5  # Number of rows I want to visualize
+        # fig, axes = plt.subplots(nrows=n, ncols=2, figsize=(20, 2*n))
+
+        # for i in range(n):
+        #     # Original data visualization
+        #     axes[i, 0].set_title(f'Original Row Validation {i}')
+        #     axes[i, 0].bar(heart_valid_originals_df.columns, heart_valid_originals_df.iloc[i], color='blue')
+            
+        #     # Reconstructed data visualization
+        #     axes[i, 1].set_title(f'Reconstructed Row Validation {i}')
+        #     axes[i, 1].bar(heart_valid_reconstructions_df.columns, heart_valid_originals_df.iloc[i], color='orange')
+
+        # plt.tight_layout()
+        # # plt.show()
+        
         n = 5  # Number of rows I want to visualize
-        fig, axes = plt.subplots(nrows=n, ncols=2, figsize=(20, 2*n))
+        num_columns = len(randhie_valid_originals_df.columns)
+        fig, axes = plt.subplots(nrows=n, ncols=2, figsize=(20, 2 * n))
+
+        # Ensure we generate enough colors by repeating the color sequence
+        # DEPRECATED: base_colors = plt.cm.tab10(np.linspace(0, 1, 10))  # 10 base colors from the tab10 colormap
+        # Also DEPRECATED: base_colors = colors.LinearSegmentedColormap.from_list(
+        #     "tab10", ["red", "green", "blue", "purple", "orange", "yellow", "cyan", "magenta", "brown", "gray"]
+        # )
+        
+        tab_10 = ["red", "green", "blue", "purple", "orange", "yellow", "cyan", "magenta", "brown", "gray"]
+        base_colors_list = colors.ListedColormap(
+            tab_10
+        )
+        
+        # Use a colormap and create specific colors for each column
+        base_colors = plt.cm.get_cmap('tab10', 10)
+        color_sequence = [base_colors(i % 10) for i in range(num_columns)]
+        # plt.imshow(np.random.rand(10, 10), cmap=base_colors)
+        # plt.colorbar()
+        # Create legend patches for each column using the generated colors
+        legend_patches = [mpatches.Patch(color=color_sequence[i], label=randhie_valid_originals_df.columns[i]) for i in range(num_columns)]
+        plt.figlegend(handles=legend_patches, loc='lower center', ncol=5, fontsize='small', title='Column Legend')
 
         for i in range(n):
-            # Original data visualization
+            # Visualization of original data
             axes[i, 0].set_title(f'Original Row Validation {i}')
-            axes[i, 0].bar(heart_valid_originals_df.columns, heart_valid_originals_df.iloc[i], color='blue')
-            
-            # Reconstructed data visualization
-            axes[i, 1].set_title(f'Reconstructed Row Validation {i}')
-            axes[i, 1].bar(heart_valid_reconstructions_df.columns, heart_valid_originals_df.iloc[i], color='orange')
+            axes[i, 0].bar(heart_valid_originals_df.columns, heart_valid_originals_df.iloc[i], color=color_sequence)
 
-        plt.tight_layout()
-        # plt.show()
-        
-        # Save the plot to a file
+            # Visualization of reconstructed data
+            axes[i, 1].set_title(f'Reconstructed Row Validation {i}')
+            axes[i, 1].bar(heart_valid_reconstructions_df.columns, heart_valid_reconstructions_df.iloc[i], color=color_sequence)
+
+            # Improve label readability
+            axes[i, 0].set_xticklabels(heart_valid_reconstructions_df.columns, rotation=90)
+            axes[i, 1].set_xticklabels(heart_valid_reconstructions_df.columns, rotation=90)
+
+        plt.tight_layout(rect=[0, 0.03, 1, 0.95])  # Adjust layout to accommodate legend
         plt.savefig('./PVM/Plots/heart_recon_validation.png')
         plt.close()
         

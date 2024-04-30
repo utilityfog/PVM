@@ -280,8 +280,9 @@ class RANDHIE:
         new_categorical_columns = RANDHIE_CATEGORICAL_VARIABLES
         standardized_df = standardize_dataframe(collapsed_df, new_numeric_columns, new_categorical_columns)
         print(f"STANDARDIZED - NEW: {standardized_df.head()}")
-        # Add plan without standardization
+        # Add plan and linc without standardization
         standardized_df['plan'] = collapsed_df['plan']
+        standardized_df['linc'] = collapsed_df['linc']
         # Test 3
         # save_dataframe(standardized_df, os.getcwd()+"/PVM/Datasets", "randhie_preprocessed3.csv")
         
