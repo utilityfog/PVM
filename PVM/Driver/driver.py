@@ -87,7 +87,7 @@ def main():
     # HYPERPARAMETERS
     batch_size, num_training_updates, num_hiddens, embedding_dim, learning_rate = VAE.return_hyperparameters()
     device = torch.device("mps" if torch.backends.mps.is_available() else "cpu")
-    encoded_randhie_df, encoded_heart_df = encoder.load_and_encode_dataframes(randhie_X, heart_X_rearranged, 31, 43, num_hiddens, embedding_dim, device, learning_rate)
+    encoded_randhie_df, encoded_heart_df = encoder.load_and_encode_dataframes(randhie_X, heart_X_rearranged, 44, 43, num_hiddens, embedding_dim, device, learning_rate)
     
     raw_dataframe_preprocessor.save_dataframe(encoded_randhie_df, os.getcwd()+"/PVM/Datasets", "randhie_predictors.csv")
     print(f"{encoded_randhie_df.head()}")

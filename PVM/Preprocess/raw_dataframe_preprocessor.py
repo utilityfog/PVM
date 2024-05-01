@@ -191,6 +191,39 @@ def plot_and_save_covariance_matrix(df, filepath):
     plt.close()
 
     print(f"Heatmap saved as {filepath}")
+    
+def save_OLS_to_plot(regression_results, is_initial):
+    # Plotting regression results
+    for target, results in regression_results.items():
+        fig, ax = plt.subplots(figsize=(10, 8))
+        print(f"results: {results.summary()}")
+        coefs = results.params
+        conf = results.conf_int()
+        err = (conf[1] - conf[0]) / 2
+
+        ax.errorbar(coefs.index, coefs, yerr=err, fmt='o', color='blue', ecolor='lightblue', elinewidth=3, capsize=0)
+        ax.set_ylabel('Coefficient')
+        if is_initial:
+            ax.set_title(f'Initial OLS Regression Results for {target}')
+        else:
+            ax.set_title(f'Augmented OLS Regression Results for {target}')
+        
+        ax.axhline(0, color='grey', linewidth=0.8)
+        ax.set_xticks(range(len(coefs)))  # Ensure x-ticks are correctly set
+        ax.set_xticklabels(coefs.index, rotation=90)
+
+        # Annotating R-squared and F-statistic
+        stats_text = f'R-squared: {results.rsquared:.3f}\nF-statistic: {results.fvalue:.3f}\nProb (F-statistic): {results.f_pvalue:.4f}'
+        ax.annotate(stats_text, xy=(0.05, 0.95), xycoords='axes fraction', verticalalignment='top', fontsize=12)
+
+        plt.tight_layout()
+        
+        if is_initial:
+            plt.savefig(f'./PVM/Plots/regression_results_{target}_initial.png')
+        else:
+            plt.savefig(f'./PVM/Plots/regression_results_{target}_augmented.png')
+            
+        plt.close()
 
 class RANDHIE:
     def original_preprocess(self, df_path):
@@ -276,13 +309,15 @@ class RANDHIE:
         # save_dataframe(collapsed_df, os.getcwd()+"/PVM/Datasets", "randhie_preprocessed2.csv")
         
         # Standardize Numeric Columns: standardized_df = standardize_df(avg_df)
-        new_numeric_columns = RANDHIE_NUMERIC_VARIABLES + paper_variables_numeric
+        new_numeric_columns = RANDHIE_NUMERIC_VARIABLES
         new_categorical_columns = RANDHIE_CATEGORICAL_VARIABLES
         standardized_df = standardize_dataframe(collapsed_df, new_numeric_columns, new_categorical_columns)
         print(f"STANDARDIZED - NEW: {standardized_df.head()}")
-        # Add plan and linc without standardization
-        standardized_df['plan'] = collapsed_df['plan']
+        # Add xage, linc, log_med_exp, log_inpatient_exp without standardization
         standardized_df['linc'] = collapsed_df['linc']
+        standardized_df['xage'] = collapsed_df['xage']
+        standardized_df['log_outpatient_exp'] = collapsed_df['log_med_exp']
+        standardized_df['log_inpatient_exp'] = collapsed_df['log_inpatient_exp']
         # Test 3
         # save_dataframe(standardized_df, os.getcwd()+"/PVM/Datasets", "randhie_preprocessed3.csv")
         
@@ -299,8 +334,8 @@ class RANDHIE:
         new_categorical_columns.append('person_type')
         
         # Drop unnecessary columns
-        standardized_df.drop(['child', 'fchild', 'coins'], axis=1, inplace=True)
-        for item in ['child', 'fchild', 'coins']:
+        standardized_df.drop(['child', 'fchild'], axis=1, inplace=True)
+        for item in ['child', 'fchild']:
             new_categorical_columns.remove(item)
         # Test 4
         # save_dataframe(standardized_df, os.getcwd()+"/PVM/Datasets", "randhie_preprocessed4.csv")
@@ -320,8 +355,8 @@ class RANDHIE:
         processed_df.drop(['income', 'year', 'outpdol', 'drugdol', 'suppdol', 'mentdol', 'inpdol', 'meddol', 'totadm', 'num', 'ghindx', 'logc', 'fmde', 'lnmeddol', 'binexp', 'zper'], axis=1, inplace=True)
         print(f"processed_df columns: {list(processed_df.columns)}")
         # 'is_positive_med_exp', 'is_positive_inpatient_exp', 'is_only_outpatient_exp'
-        y_list = ['log_med_exp', 'log_inpatient_exp']
-        X = processed_df.drop(y_list+['is_positive_med_exp', 'is_positive_inpatient_exp', 'is_only_outpatient_exp'], axis=1)
+        y_list = ['log_outpatient_exp', 'log_inpatient_exp']
+        X = processed_df.drop(y_list+['log_med_exp', 'is_positive_med_exp', 'is_positive_inpatient_exp', 'is_only_outpatient_exp'], axis=1)
         print(f"final randhie X: {X.head()}")
         
         # Final RANDHIE predictors
@@ -337,39 +372,54 @@ class RANDHIE:
         # Check if final preprocessing has been done correctly; includes both X and y
         # save_dataframe(processed_df, os.getcwd()+"/PVM/Datasets", "randhie_preprocessed_final.csv")
         
-        # THREE EQUATION MODEL ACCORDING TO PAPER: Health Insurance and the Demand for Medical Care
-
+        regression_results = {}
+        # FOUR EQUATION MODEL ACCORDING TO PAPER: Health Insurance and the Demand for Medical Care
+        
         ### REMOVED due to all instances of is_positive_med_exp only being 1 after being preprocessed; this is anticipated as we are have summarized 5 years of data into 1
-        # # Equation 1: Lasso model for zero versus positive medical expenses
-        # # model_1 = Probit(processed_df['is_positive_med_exp_1'], X).fit() # LASSO
+        # Equation 1: Lasso model for zero versus positive medical expenses
         # lasso_log_model_1 = LogisticRegression(penalty='l1', solver='liblinear')
         # lasso_log_model_1.fit(X, processed_df['is_positive_med_exp'])
-
+        # regression_results['is_positive_med_exp'] = lasso_log_model_1
+        
         # Equation 2: Lasso model for having zero versus positive inpatient expense, given positive use of medical services
         df_pos_med_exp = processed_df[processed_df['is_positive_med_exp'] == 1]  # Filter for positive medical use
-        # model_2 = Probit(df_pos_med_exp['is_positive_inpatient_exp_1'], X.loc[df_pos_med_exp.index]).fit() # LASSO
         lasso_log_model_2 = LogisticRegression(penalty='l1', solver='liblinear')
         lasso_log_model_2.fit(X, df_pos_med_exp['is_positive_inpatient_exp'])
-
+        # regression_results['is_positive_inpatient_exp'] = lasso_log_model_2
+        
         # Equation 3: OLS regression for log of positive medical expenses if only outpatient services are used
         df_only_outpatient_exp = processed_df[processed_df['is_only_outpatient_exp'] == 1]
         model_3 = OLS(df_only_outpatient_exp['log_med_exp'], X.loc[df_only_outpatient_exp.index]).fit()
-
+        regression_results['log_outpatient_exp'] = model_3
+        
         # Equation 4: OLS regression for log of medical expenses for those with any inpatient expenses
         df_pos_inpatient_exp = processed_df[processed_df['is_positive_inpatient_exp'] == 1]
         model_4 = OLS(df_pos_inpatient_exp['log_inpatient_exp'], X.loc[df_pos_inpatient_exp.index]).fit()
-
-        # Print summaries of the models
-        # print("Model 1: Probit model for zero versus positive medical expenses")
-        # print(lasso_log_model_1.summary())
+        regression_results['log_inpatient_exp'] = model_4
         
-        print("\nModel 2: Probit model for having zero versus positive inpatient expense, given positive use of medical services")
+        # Print summaries of the models
+        
+        # Equation 1
+        # print("\nEquation 1: Lasso model for zero versus positive medical expenses")
+        # print("Lasso Logistic Regression Model Coefficients:")
+        # print(lasso_log_model_1.coef_)
+        # print("Intercept:", lasso_log_model_1.intercept_)
+        # # Generating predictions to use in classification report
+        # predictions = lasso_log_model_1.predict(X)
+        # # Classification report
+        # print("\nClassification Report:")
+        # print(classification_report(df_pos_med_exp['is_positive_med_exp'], predictions))
+        # # Confusion Matrix
+        # print("\nConfusion Matrix:")
+        # print(confusion_matrix(df_pos_med_exp['is_positive_med_exp'], predictions))
+        
+        # Equation 2
+        print("\nEquation 2: Probit model for having zero versus positive inpatient expense, given positive use of medical services")
         print("Lasso Logistic Regression Model Coefficients:")
         print(lasso_log_model_2.coef_)
         print("Intercept:", lasso_log_model_2.intercept_)
         # Generating predictions to use in classification report
         predictions = lasso_log_model_2.predict(X)
-        X.drop('const', axis=1, inplace=True) # Drop the constant intercept before returning or saving X
         # Classification report
         print("\nClassification Report:")
         print(classification_report(df_pos_med_exp['is_positive_inpatient_exp'], predictions))
@@ -377,11 +427,19 @@ class RANDHIE:
         print("\nConfusion Matrix:")
         print(confusion_matrix(df_pos_med_exp['is_positive_inpatient_exp'], predictions))
         
-        print("\nModel 3: OLS regression for log of positive medical expenses if only outpatient services are used")
+        # Equation 3
+        print("\nEquation 3: OLS regression for log of positive medical expenses if only outpatient services are used")
         print(model_3.summary())
         
-        print("\nModel 4: OLS regression for log of medical expenses for those with any inpatient expenses")
+        # Equation 4
+        print("\nEquation 4: OLS regression for log of medical expenses for those with any inpatient expenses")
         print(model_4.summary())
+        
+        # Save as plot
+        save_OLS_to_plot(regression_results, True)
+        
+        # Drop the constant intercept before returning or saving X
+        X.drop('const', axis=1, inplace=True)
         
         # Store both final X_list (order static) and final y variables in global lists
         global FINAL_RANDHIE_REGRESSORS 
@@ -480,6 +538,8 @@ class HEART:
         categorical_columns = HEART_CATEGORICAL_VARIABLES
         standardized_df = standardize_dataframe(df_cleaned, numeric_columns, categorical_columns)
         print(f"STANDARDIZED - NEW: {standardized_df.head()}")
+        standardized_df['Age'] = df_cleaned['Age'] # Add age without standardization to engineer the contribution of Age the VAE Vector Encoding process since age is a common column
+        
         # Test 1
         # save_dataframe(standardized_df, os.getcwd()+"/PVM/Datasets", "heart_preprocessed1.csv")
         
@@ -501,6 +561,7 @@ class HEART:
         # Define independent variables
         X_list = list(X.columns)
         print(f"final heart X: {X.head()}")
+        print(f"length of final heart X: {len(X.columns)}")
         global FINAL_HEART_REGRESSORS
         FINAL_HEART_REGRESSORS = X_list
         

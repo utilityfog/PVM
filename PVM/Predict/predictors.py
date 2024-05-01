@@ -33,7 +33,7 @@ def test_research_null(combined_data: pd.DataFrame, final_randhie_regressors: pd
     """
         Summary: The results show that 
     """
-    final_randhie_regressors.loc[:, ['Log_Income', 'Heart_Attack_Risk_Predicted', 'Stress Level', 'Sedentary Hours Per Day', 'Obesity_1', 'Cholesterol', 'Previous Heart Problems_1', 'Physical Activity Days Per Week', 'Medication Use_1', 'Sleep Hours Per Day']] = final_heart_regressors[['Log_Income', 'Heart_Attack_Risk_Predicted', 'Stress Level', 'Sedentary Hours Per Day', 'Obesity_1', 'Cholesterol', 'Previous Heart Problems_1', 'Physical Activity Days Per Week', 'Medication Use_1', 'Sleep Hours Per Day']].values
+    final_randhie_regressors.loc[:, ['Age', 'Log_Income', 'Heart_Attack_Risk_Predicted', 'Stress Level', 'Sedentary Hours Per Day', 'Obesity_1', 'Cholesterol', 'Previous Heart Problems_1', 'Physical Activity Days Per Week', 'Medication Use_1', 'Sleep Hours Per Day']] = final_heart_regressors[['Age', 'Log_Income', 'Heart_Attack_Risk_Predicted', 'Stress Level', 'Sedentary Hours Per Day', 'Obesity_1', 'Cholesterol', 'Previous Heart Problems_1', 'Physical Activity Days Per Week', 'Medication Use_1', 'Sleep Hours Per Day']].values
     
     predictors = final_randhie_regressors
     print(f"Using predictors: {predictors}")
@@ -59,29 +59,9 @@ def test_research_null(combined_data: pd.DataFrame, final_randhie_regressors: pd
         #     'MSE': mse
         # }
         regression_results[target] = results
-        
-    # Plotting regression results
-    for target, results in regression_results.items():
-        fig, ax = plt.subplots(figsize=(10, 8))
-        print(f"results: {results.summary()}")
-        coefs = results.params
-        conf = results.conf_int()
-        err = (conf[1] - conf[0]) / 2
-
-        ax.errorbar(coefs.index, coefs, yerr=err, fmt='o', color='blue', ecolor='lightblue', elinewidth=3, capsize=0)
-        ax.set_ylabel('Coefficient')
-        ax.set_title(f'Augmented OLS Regression Results for {target}')
-        ax.axhline(0, color='grey', linewidth=0.8)
-        ax.set_xticks(range(len(coefs)))  # Ensure x-ticks are correctly set
-        ax.set_xticklabels(coefs.index, rotation=90)
-
-        # Annotating R-squared and F-statistic
-        stats_text = f'R-squared: {results.rsquared:.3f}\nF-statistic: {results.fvalue:.3f}\nProb (F-statistic): {results.f_pvalue:.4f}'
-        ax.annotate(stats_text, xy=(0.05, 0.95), xycoords='axes fraction', verticalalignment='top', fontsize=12)
-
-        plt.tight_layout()
-        plt.savefig(f'./PVM/Plots/regression_results_{target}.png')
-        plt.close()
+    
+    # Save regression results as plot
+    raw_dataframe_preprocessor.save_OLS_to_plot(regression_results, False)
     
 def run_model_pipeline_and_return_final_heart_predictors(heart_processor: raw_dataframe_preprocessor.HEART, heart_path: str, heart_X: pd.DataFrame, heart_y: pd.DataFrame=None) -> pd.DataFrame:
     # Define a dictionary to hold all the model prediction functions

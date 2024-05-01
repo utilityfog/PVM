@@ -40,7 +40,7 @@ make_grid = utils.make_grid
 BATCH_SIZE = 1024
 NUM_TRAINING_UPDATES = 2000
 NUM_HIDDENS = 128
-EMBEDDING_DIM = 31
+EMBEDDING_DIM = 40
 LEARNING_RATE = 1e-3
 
 # Obsolete
@@ -277,7 +277,7 @@ class Trainer:
         ### Train VAE for randhie
         
         ### Train Encoder for randhie
-        randhie_model = Model(31, NUM_HIDDENS, EMBEDDING_DIM).to(device)
+        randhie_model = Model(44, NUM_HIDDENS, EMBEDDING_DIM).to(device)
         # Optimizer
         randhie_optimizer = optim.Adam(randhie_model.parameters(), lr=LEARNING_RATE, amsgrad=False)
         
