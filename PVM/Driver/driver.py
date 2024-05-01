@@ -19,7 +19,7 @@ from Vectorize import VAE
 from Preprocess import raw_dataframe_preprocessor, column_optimizer
 from Predict import predictors as oracle
 from Vectorize import Encoder
-from HNSW import Row_Matcher
+from Retrieve import Row_Matcher
 
 def main():
     # randhie dataset path
