@@ -1,10 +1,10 @@
 # What is PVM?
 
-### PVM stands for Probabilistic Vectorized Matching, a novel technique for transforming table rows into vectors for more computationally efficient and accurate probabilistic row matching given 2 or more tables with very little common columns.
+### PVM stands for Probabilistic Vectorized Matching, a novel technique for transforming table rows into vectors for more computationally efficient and accurate probabilistic row matching given 2 or more tables without common columns.
 
 ## When should I use it?
 
-### PVM is useful in situations when you have 2 or more data frames with very little common columns and mixed column orderings but still have a certain degree of statistical correlation between certain regions in the matrix of one table and certain regions in the matrix of another table. Using PVM, the tables can still be joined, as if you would apply separate A left join B on A.column=B.column rules for each individual row of both tables.
+### PVM is useful in situations when you have 2 or more data frames without common columns and mixed column orderings but still have a certain degree of statistical correlation between certain regions in the matrix of one table and certain regions in the matrix of another table. Using PVM, the tables can still be joined, as if you would apply separate A left join B on A.column=B.column rules for each individual row of both tables.
 
 ## How does it work?
 
@@ -16,6 +16,8 @@
 
 ## What can I do with this?
 
-### For demonstration, we have shown how we can improve the results of the RANDHIE experiment, which was done in the past, using a dataset from the present. Normally, without many common columns, it is difficult to join the two tables in a way such that we can extract meaningful statistical information from the joined columns. However, we demonstrate that joining additional predictors using PVM can add meaningful predictors to an unrelated dataset.
+### For demonstration, we have shown how we can improve the results of the RANDHIE experiment, which was done in the past, using a dataset from the present. Normally, without common columns, it is difficult to join the two tables in a way such that we can extract meaningful statistical information from the joined columns. However, we demonstrate that joining additional predictors using PVM can add meaningful predictors to an unrelated dataset.
 
 ### We have also implemented a Transformer model made by @RayCarpenterIII for predicting heart attack risk from a joiner dataset, thereby showing how PVM allows synthetic variables predicted by a black box deep learning model can also be used for causal inference in a way that is interpretable in the context of a linear regression.
+
+*Please contact me @ wonjae@unc.edu or +15206454193 if you have interest in contributing or peer reviewing our research.*
