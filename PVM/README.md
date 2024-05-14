@@ -20,4 +20,4 @@
 
 ### We have also implemented a Transformer model made by @RayCarpenterIII for predicting heart attack risk from a joiner dataset, thereby showing how PVM allows synthetic variables predicted by a black box deep learning model can also be used for causal inference in a way that is interpretable in the context of a linear regression.
 
-*Please contact me @ wonjae@unc.edu or +15206454193 if you have interest in contributing or peer reviewing our research.
+### Please contact me @ wonjae@unc.edu or +15206454193 if you have interest in contributing or peer reviewing our research.
