@@ -19,3 +19,5 @@
 ### For demonstration, we have shown how we can improve the results of the RANDHIE experiment, which was done in the past, using a dataset from the present. Normally, without common columns, it is difficult to join the two tables in a way such that we can extract meaningful statistical information from the joined columns. However, we demonstrate that joining additional predictors using PVM can add meaningful predictors to an unrelated dataset.
 
 ### We have also implemented a Transformer model made by @RayCarpenterIII for predicting heart attack risk from a joiner dataset, thereby showing how PVM allows synthetic variables predicted by a black box deep learning model can also be used for causal inference in a way that is interpretable in the context of a linear regression.
+
+*Please contact me @ wonjae@unc.edu or +15206454193 if you have interest in contributing or peer reviewing our research.
